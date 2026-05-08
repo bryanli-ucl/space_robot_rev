@@ -23,6 +23,10 @@ UltraSonicDistanceSensor usr((int)PINS::US_RIGHT_TRIG, (int)PINS::US_RIGHT_ECHO)
 
 QTRSensors qtr;
 
+MFRC522_I2C rfid;
+
+ICM_20948_I2C imu;
+
 // Function Prototypes
 void serial_tx(const char* fmt, ...);
 
@@ -56,8 +60,25 @@ void func_mission() {
     }
 }
 
+
+volatile uint8_t mbutton = 0;
+volatile int32_t mx      = 0;
+volatile int32_t my      = 0;
+volatile int8_t mz       = 0;
+
+volatile int16_t dist_front = 0;
+volatile int16_t dist_left  = 0;
+volatile int16_t dist_right = 0;
+
+volatile uint32_t detected_uid = 0;
+
 void func_sensors() {
+
+    // IR Sensors
+
+    serial_tx("IR Array Init\n");
     qtr.setTypeRC();
+    qtr.setEmitterPins((int)PINS::IR_CTRL_O, (int)PINS::IR_CTRL_E);
     qtr.setSensorPins((const uint8_t[]){
                       (int)PINS::IR_1,
                       (int)PINS::IR_2,
@@ -71,9 +92,7 @@ void func_sensors() {
                       },
     9);
 
-    qtr.setEmitterPins((int)PINS::IR_CTRL_O, (int)PINS::IR_CTRL_E);
-
-    ThisThread::sleep_for(1s);
+    ThisThread::sleep_for(500ms);
 
     qtr.calibrationOn.minimum = (uint16_t*)malloc(sizeof(uint16_t) * 9);
     qtr.calibrationOn.maximum = (uint16_t*)malloc(sizeof(uint16_t) * 9);
@@ -83,20 +102,144 @@ void func_sensors() {
     }
     qtr.calibrationOn.initialized = true;
 
+    // Ultrasonic
+
+    serial_tx("Ultrasonic Init\n");
+    constexpr float us_temperature = 25.f;
+
+    // RFID
+
+    serial_tx("RFID Init\n");
+    rfid.PCD_Init();
+    if (!rfid.PCD_PerformSelfTest()) {
+        serial_tx("RFID Cannot Pass Self Test\n");
+    }
+
+    // IMU
+
+    serial_tx("IMU Init\n");
+    if (imu.begin(Wire1) != ICM_20948_Stat_Ok) {
+        serial_tx("IMU init fail\n");
+    }
+
+    float mag_scale_x = 1.f;
+    float mag_scale_y = 1.f;
+    float mag_scale_z = 1.f;
+
+    float mag_off_x = 0.f;
+    float mag_off_y = 0.f;
+    float mag_off_z = 0.f;
+
+    float radius_x = 0.f;
+    float radius_y = 0.f;
+    float radius_z = 0.f;
+
+    auto imu_calibrate = [&]() {
+        float min_x = INT_MAX, max_x = INT_MIN;
+        float min_y = INT_MAX, max_y = INT_MIN;
+        float min_z = INT_MAX, max_z = INT_MIN;
+
+        serial_tx("imu_calibratem Begin\n");
+
+        unsigned long start = millis();
+        while (millis() - start < 10000) {
+            if (imu.dataReady()) {
+                auto data = imu.getAGMT();
+
+                float mx = imu.magX();
+                float my = imu.magY();
+                float mz = imu.magZ();
+
+                if (mx < min_x) min_x = mx;
+                if (mx > max_x) max_x = mx;
+                if (my < min_y) min_y = my;
+                if (my > max_y) max_y = my;
+                if (mz < min_z) min_z = mz;
+                if (mz > max_z) max_z = mz;
+            }
+            ThisThread::sleep_for(20ms);
+        }
+
+        // Hard-iron offset = center of the ellipsoid
+        mag_off_x = (min_x + max_x) / 2.0f;
+        mag_off_y = (min_y + max_y) / 2.0f;
+        mag_off_z = (min_z + max_z) / 2.0f;
+
+        // Soft-iron scale = make each axis radius equal
+        float radius_x = (max_x - min_x) / 2.0f;
+        float radius_y = (max_y - min_y) / 2.0f;
+        float radius_z = (max_z - min_z) / 2.0f;
+        float avg_r    = (radius_x + radius_y + radius_z) / 3.0f;
+
+        if (avg_r > 0.1f) {
+            mag_scale_x = avg_r / radius_x;
+            mag_scale_y = avg_r / radius_y;
+            mag_scale_z = avg_r / radius_z;
+        }
+
+        serial_tx("imu_calibratem Done\n");
+        serial_tx("Offset (uT): %f %f %f\n", mag_off_x, mag_off_y, mag_off_z);
+        serial_tx("Radius (uT): %f %f %f\n", mag_off_x, mag_off_y, mag_off_z);
+    };
+
+    imu_calibrate();
+
+    // Mouse
+
+    serial_tx("Mouse Init");
+    mouse.attachButtonEvent([](uint8_t btn) { mbutton = btn; });
+    mouse.attachXEvent([](int8_t v) { mx += v; });
+    mouse.attachYEvent([](int8_t v) { my -= v; });
+    mouse.attachZEvent([](int8_t v) { mz += v; });
+
     while (1) {
-        static uint16_t sensorValues[9];
-        uint16_t position = qtr.readLineBlack(sensorValues);
 
-        // print the sensor values as numbers from 0 to 1000, where 0 means maximum
-        // reflectance and 1000 means minimum reflectance, followed by the line
-        // position
-        // for (uint8_t i = 0; i < 9; i++) {
-        //     Serial.print(sensorValues[i]);
-        //     Serial.print('\t');
-        // }
-        Serial.println(position);
+        // IR Array
 
-        ThisThread::sleep_for(10ms);
+        static uint16_t ir_vals[9];
+        uint16_t position = qtr.readLineBlack(ir_vals);
+
+        // Ultrasonic
+
+        dist_front = usf.measureDistanceCm(us_temperature);
+        dist_front = usf.measureDistanceCm(us_temperature);
+        dist_front = usf.measureDistanceCm(us_temperature);
+
+        // RFID
+
+        if (rfid.PICC_IsNewCardPresent()) {
+            if (rfid.PICC_ReadCardSerial()) {
+                detected_uid = reinterpret_cast<uint32_t*>(rfid.uid.uidByte)[0];
+                serial_tx("New Tag Detected, size: %d, uid: %d\n", rfid.uid.size, detected_uid);
+            }
+        }
+
+        // IMU
+
+        if (imu.dataReady()) {
+            auto data = imu.getAGMT();
+
+            float ax = imu.accX();
+            float ay = imu.accY();
+            float az = imu.accZ();
+
+            float gx = imu.gyrX();
+            float gy = imu.gyrY();
+            float gz = imu.gyrZ();
+
+            float mx = imu.magX();
+            float my = imu.magY();
+            float mz = imu.magZ();
+        }
+
+        // Mouse
+        if (!mouse.connected()) {
+            if (mouse.connect()) {
+                serial_tx("Mouse connected");
+            }
+        }
+
+        ThisThread::sleep_for(100ms);
     }
 }
 
@@ -116,6 +259,28 @@ void func_chassis() {
     }
 }
 
+
+void func_mouse() {
+
+    while (1) {
+        while (!mouse.connected()) {
+            bool ret = mouse.connect();
+            if (ret == true) {
+                serial_tx("mouse connected");
+            }
+            ThisThread::sleep_for(100ms);
+        }
+
+        // serial_tx("mouse: x: %d, y: %d, btn: %d, z: %d\n", (int)mx, (int)my, (int)mbutton, (int)mz);
+
+        ThisThread::sleep_for(1000ms);
+    }
+}
+
+// ============================================================
+// ================== About Debug and Display =================
+// ============================================================
+
 void func_wifi_server() {
     if (CONFIG::SSID == nullptr) {
         serial_tx("Please set CONFIG::SSID in main.hpp\n");
@@ -129,10 +294,6 @@ void func_wifi_server() {
 
     WiFi.begin(CONFIG::SSID, CONFIG::PWD);
 }
-
-// ============================================================
-// ================== About Debug and Display =================
-// ============================================================
 
 Mail<std::array<char, 256>, 64> mail_serial_debug;
 void serial_tx(const char* fmt, ...) {
@@ -151,7 +312,7 @@ void serial_tx(const char* fmt, ...) {
 
 void func_serial_debug() {
     Serial1.begin(115200);
-    delay(100);
+    ThisThread::sleep_for(100ms);
 
     while (1) {
         while (!mail_serial_debug.empty()) {
@@ -161,32 +322,6 @@ void func_serial_debug() {
             mail_serial_debug.free(msg);
         }
         ThisThread::sleep_for(100ms);
-    }
-}
-
-volatile uint8_t mbutton = 0;
-volatile int32_t mx      = 0;
-volatile int32_t my      = 0;
-volatile int8_t mz       = 0;
-
-void func_mouse() {
-    mouse.attachButtonEvent([](uint8_t btn) { mbutton = btn; });
-    mouse.attachXEvent([](int8_t v) { mx += v; });
-    mouse.attachYEvent([](int8_t v) { my -= v; });
-    mouse.attachZEvent([](int8_t v) { mz += v; });
-
-    while (1) {
-        while (!mouse.connected()) {
-            bool ret = mouse.connect();
-            if (ret == true) {
-                serial_tx("mouse connected");
-            }
-            ThisThread::sleep_for(100ms);
-        }
-
-        // serial_tx("mouse: x: %d, y: %d, btn: %d, z: %d\n", (int)mx, (int)my, (int)mbutton, (int)mz);
-
-        ThisThread::sleep_for(1000ms);
     }
 }
 
