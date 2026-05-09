@@ -3,7 +3,6 @@
 Thread task_heartbeat(osPriorityBelowNormal7);
 Thread task_serial_debug(osPriorityBelowNormal4);
 Thread task_sensors(osPriorityBelowNormal3);
-Thread task_mouse(osPriorityBelowNormal2);
 Thread task_mission(osPriorityAboveNormal2);
 Thread task_wifi_server(osPriorityAboveNormal3);
 Thread task_chassis(osPriorityAboveNormal4);
@@ -23,7 +22,7 @@ UltraSonicDistanceSensor usr((int)PINS::US_RIGHT_TRIG, (int)PINS::US_RIGHT_ECHO)
 
 QTRSensors qtr;
 
-MFRC522_I2C rfid;
+MFRC522_I2C rfid(static_cast<byte>(I2C_ADDR::RFID), static_cast<byte>(-1), &Wire1);
 
 ICM_20948_I2C imu;
 
@@ -33,7 +32,6 @@ void serial_tx(const char* fmt, ...);
 void func_heartbeat();
 void func_serial_debug();
 void func_wifi_server();
-void func_mouse();
 void func_chassis();
 void func_mission();
 void func_sensors();
@@ -42,7 +40,6 @@ void setup() {
     task_heartbeat.start(func_heartbeat);
     task_serial_debug.start(func_serial_debug);
     task_wifi_server.start(func_wifi_server);
-    task_mouse.start(func_mouse);
     task_chassis.start(func_chassis);
     task_mission.start(func_mission);
     task_sensors.start(func_sensors);
@@ -52,6 +49,31 @@ void loop() {
     ThisThread::sleep_for(10s);
 }
 
+// Mouse
+volatile uint8_t mbutton = 0;
+volatile int32_t mx      = 0;
+volatile int32_t my      = 0;
+volatile int8_t mz       = 0;
+
+// US
+volatile int16_t dist_front = 0;
+volatile int16_t dist_left  = 0;
+volatile int16_t dist_right = 0;
+
+// IR
+uint16_t ir_vals[9];
+
+// RFID
+volatile uint32_t detected_uid = 0;
+
+// IMU
+float yaw = 0;
+
+// LED
+led_status_t led_red   = led_status_t::OFF;
+led_status_t led_green = led_status_t::OFF;
+led_status_t led_blue  = led_status_t::BLINK;
+
 void func_mission() {
     ThisThread::sleep_for(1000ms);
     while (1) {
@@ -60,22 +82,9 @@ void func_mission() {
     }
 }
 
-
-volatile uint8_t mbutton = 0;
-volatile int32_t mx      = 0;
-volatile int32_t my      = 0;
-volatile int8_t mz       = 0;
-
-volatile int16_t dist_front = 0;
-volatile int16_t dist_left  = 0;
-volatile int16_t dist_right = 0;
-
-volatile uint32_t detected_uid = 0;
-
 void func_sensors() {
 
     // IR Sensors
-
     serial_tx("IR Array Init\n");
     qtr.setTypeRC();
     qtr.setEmitterPins((int)PINS::IR_CTRL_O, (int)PINS::IR_CTRL_E);
@@ -103,20 +112,19 @@ void func_sensors() {
     qtr.calibrationOn.initialized = true;
 
     // Ultrasonic
-
     serial_tx("Ultrasonic Init\n");
     constexpr float us_temperature = 25.f;
 
     // RFID
-
     serial_tx("RFID Init\n");
-    rfid.PCD_Init();
-    if (!rfid.PCD_PerformSelfTest()) {
-        serial_tx("RFID Cannot Pass Self Test\n");
-    }
+    Wire1.begin();
+
+    // rfid.PCD_Init();
+    // if (!rfid.PCD_PerformSelfTest()) {
+    //     serial_tx("RFID Cannot Pass Self Test\n");
+    // }
 
     // IMU
-
     serial_tx("IMU Init\n");
     if (imu.begin(Wire1) != ICM_20948_Stat_Ok) {
         serial_tx("IMU init fail\n");
@@ -144,7 +152,7 @@ void func_sensors() {
         unsigned long start = millis();
         while (millis() - start < 10000) {
             if (imu.dataReady()) {
-                auto data = imu.getAGMT();
+                imu.getAGMT();
 
                 float mx = imu.magX();
                 float my = imu.magY();
@@ -166,10 +174,10 @@ void func_sensors() {
         mag_off_z = (min_z + max_z) / 2.0f;
 
         // Soft-iron scale = make each axis radius equal
-        float radius_x = (max_x - min_x) / 2.0f;
-        float radius_y = (max_y - min_y) / 2.0f;
-        float radius_z = (max_z - min_z) / 2.0f;
-        float avg_r    = (radius_x + radius_y + radius_z) / 3.0f;
+        radius_x    = (max_x - min_x) / 2.0f;
+        radius_y    = (max_y - min_y) / 2.0f;
+        radius_z    = (max_z - min_z) / 2.0f;
+        float avg_r = (radius_x + radius_y + radius_z) / 3.0f;
 
         if (avg_r > 0.1f) {
             mag_scale_x = avg_r / radius_x;
@@ -182,11 +190,10 @@ void func_sensors() {
         serial_tx("Radius (uT): %f %f %f\n", mag_off_x, mag_off_y, mag_off_z);
     };
 
-    imu_calibrate();
+    // imu_calibrate();
 
     // Mouse
-
-    serial_tx("Mouse Init");
+    serial_tx("Mouse Init\n");
     mouse.attachButtonEvent([](uint8_t btn) { mbutton = btn; });
     mouse.attachXEvent([](int8_t v) { mx += v; });
     mouse.attachYEvent([](int8_t v) { my -= v; });
@@ -196,8 +203,8 @@ void func_sensors() {
 
         // IR Array
 
-        static uint16_t ir_vals[9];
         uint16_t position = qtr.readLineBlack(ir_vals);
+
 
         // Ultrasonic
 
@@ -207,36 +214,79 @@ void func_sensors() {
 
         // RFID
 
-        if (rfid.PICC_IsNewCardPresent()) {
-            if (rfid.PICC_ReadCardSerial()) {
-                detected_uid = reinterpret_cast<uint32_t*>(rfid.uid.uidByte)[0];
-                serial_tx("New Tag Detected, size: %d, uid: %d\n", rfid.uid.size, detected_uid);
-            }
-        }
+        // if (rfid.PICC_IsNewCardPresent()) {
+        //     if (rfid.PICC_ReadCardSerial()) {
+        //         detected_uid = reinterpret_cast<uint32_t*>(rfid.uid.uidByte)[0];
+        //         serial_tx("New Tag Detected, size: %d, uid: %d\n", rfid.uid.size, detected_uid);
+        //     }
+        // }
 
         // IMU
 
         if (imu.dataReady()) {
-            auto data = imu.getAGMT();
+            imu.getAGMT();
 
             float ax = imu.accX();
             float ay = imu.accY();
             float az = imu.accZ();
 
-            float gx = imu.gyrX();
-            float gy = imu.gyrY();
-            float gz = imu.gyrZ();
+            // float gx = imu.gyrX();
+            // float gy = imu.gyrY();
+            // float gz = imu.gyrZ();
 
             float mx = imu.magX();
             float my = imu.magY();
             float mz = imu.magZ();
+
+            // 1. Normalize accelerometer to get gravity vector
+
+            float norm = sqrtf(ax * ax + ay * ay + az * az);
+
+            norm = (norm < 1) ? 1 : norm;
+
+            ax = ax / norm;
+            ay = ay / norm;
+            az = az / norm;
+
+            // 2. Roll and Pitch
+
+            float roll  = atan2f(ay, az);
+            float pitch = atan2f(-ax, sqrtf(ay * ay + az * az));
+
+            // 3. Tilt-compensated magnetometer
+
+            float sinr = sinf(roll);
+            float cosr = cosf(roll);
+
+            float sinp = sinf(pitch);
+            float cosp = cosf(pitch);
+
+            float mx_comp = mx * cosp + my * sinr + mz * cosr * sinp;
+            float my_comp = my * cosr - mz * sinr;
+
+            // 4. compute Yaw
+
+            yaw = atan2f(-my_comp, mx_comp) * RAD_TO_DEG;
+            if (yaw < 0.f) yaw += 360.f;
         }
 
         // Mouse
         if (!mouse.connected()) {
             if (mouse.connect()) {
-                serial_tx("Mouse connected");
+                serial_tx("Mouse connected\n");
             }
+        }
+
+        if (mbutton & MOUSE::LEFT) {
+            led_red = led_status_t::BLINK;
+        } else {
+            led_red = led_status_t::OFF;
+        }
+
+        if (mbutton & MOUSE::RIGHT) {
+            led_green = led_status_t::BLINK;
+        } else {
+            led_green = led_status_t::OFF;
         }
 
         ThisThread::sleep_for(100ms);
@@ -245,35 +295,16 @@ void func_sensors() {
 
 void func_chassis() {
     chassis.set_paras(1.f, 1.f, 0.05f);
-
-    chassis.set_target(1, 0, 0);
+    chassis.set_target(0, 0, 0);
 
     int cnt = 200;
     while (1) {
         chassis.update(5ms);
         if (--cnt == 0) {
             cnt = 10;
-            serial_tx("chassis: %f %f %f %f, mouse: %d %d\n", chassis.get_vfl(), chassis.get_vfr(), chassis.get_vrl(), chassis.get_vrr(), mx, my);
+            // serial_tx("chassis: %f %f %f %f, mouse: %d %d\n", chassis.get_vfl(), chassis.get_vfr(), chassis.get_vrl(), chassis.get_vrr(), mx, my);
         }
         ThisThread::sleep_for(5ms);
-    }
-}
-
-
-void func_mouse() {
-
-    while (1) {
-        while (!mouse.connected()) {
-            bool ret = mouse.connect();
-            if (ret == true) {
-                serial_tx("mouse connected");
-            }
-            ThisThread::sleep_for(100ms);
-        }
-
-        // serial_tx("mouse: x: %d, y: %d, btn: %d, z: %d\n", (int)mx, (int)my, (int)mbutton, (int)mz);
-
-        ThisThread::sleep_for(1000ms);
     }
 }
 
@@ -293,6 +324,20 @@ void func_wifi_server() {
     }
 
     WiFi.begin(CONFIG::SSID, CONFIG::PWD);
+
+    while (WiFi.localIP()[0] == 0) {
+        static int attemps = 100;
+        if (attemps-- == 0) {
+            serial_tx("Cannot get local IP\n");
+            break;
+        }
+        ThisThread::sleep_for(100ms);
+    }
+    serial_tx("Local IP: %s\n", WiFi.localIP().toString().c_str());
+
+    if (WiFi.ping("192.168.1.1") == -1) {
+        serial_tx("Server Not Found\n");
+    }
 }
 
 Mail<std::array<char, 256>, 64> mail_serial_debug;
@@ -326,14 +371,55 @@ void func_serial_debug() {
 }
 
 void func_heartbeat() {
-    pinMode(LED_BLUE, OUTPUT);
-    digitalWrite(LED_BLUE, HIGH);
+
+    constexpr int red_led_pin   = LED_RED;
+    constexpr int green_led_pin = LED_GREEN;
+    constexpr int blue_led_pin  = LED_BLUE;
+
+    pinMode(red_led_pin, OUTPUT);
+    pinMode(green_led_pin, OUTPUT);
+    pinMode(blue_led_pin, OUTPUT);
+
+    digitalWrite(red_led_pin, HIGH);
+    digitalWrite(green_led_pin, HIGH);
+    digitalWrite(blue_led_pin, HIGH);
+
+    volatile bool toggle = false;
 
     while (1) {
-        ThisThread::sleep_for(1s);
-        digitalWrite(LED_BLUE, LOW);
-        ThisThread::sleep_for(1s);
-        digitalWrite(LED_BLUE, HIGH);
-        serial_tx("Heart Beat: %ums\n", millis());
+        static int heart_beat_cnt = 0;
+        if (heart_beat_cnt-- == 0) {
+            serial_tx("Heart Beat: %ums\n", millis());
+            heart_beat_cnt = 40;
+        }
+
+        static int blink_cnt = 0;
+        if (blink_cnt-- == 0) {
+            toggle    = !toggle;
+            blink_cnt = 10;
+        }
+
+        if (led_red == led_status_t::ON)
+            digitalWrite(red_led_pin, LOW);
+        else if (led_red == led_status_t::OFF)
+            digitalWrite(red_led_pin, HIGH);
+        else if (led_red == led_status_t::BLINK)
+            digitalWrite(red_led_pin, toggle ? LOW : HIGH);
+
+        if (led_green == led_status_t::ON)
+            digitalWrite(green_led_pin, LOW);
+        else if (led_green == led_status_t::OFF)
+            digitalWrite(green_led_pin, HIGH);
+        else if (led_green == led_status_t::BLINK)
+            digitalWrite(green_led_pin, toggle ? LOW : HIGH);
+
+        if (led_blue == led_status_t::ON)
+            digitalWrite(blue_led_pin, LOW);
+        else if (led_blue == led_status_t::OFF)
+            digitalWrite(blue_led_pin, HIGH);
+        else if (led_blue == led_status_t::BLINK)
+            digitalWrite(blue_led_pin, toggle ? LOW : HIGH);
+
+        ThisThread::sleep_for(50ms);
     }
 }

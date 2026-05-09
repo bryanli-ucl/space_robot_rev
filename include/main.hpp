@@ -107,10 +107,41 @@ constexpr int SERVER_PORT       = 8080;
 
 }; // namespace CONFIG
 
+namespace MOUSE {
+constexpr int LEFT  = 0b0001;
+constexpr int RIGHT = 0b0010;
+constexpr int MID   = 0b0100;
+}; // namespace MOUSE
 
 // Global Vars
 
+enum class led_status_t {
+    ON,
+    OFF,
+    BLINK,
+};
+
+// Mouse
 extern volatile uint8_t mbutton;
 extern volatile int32_t mx;
 extern volatile int32_t my;
 extern volatile int8_t mz;
+
+// US
+extern volatile int16_t dist_front;
+extern volatile int16_t dist_left;
+extern volatile int16_t dist_right;
+
+// IR
+extern uint16_t ir_vals[9];
+
+// RFID
+extern volatile uint32_t detected_uid;
+
+// IMU
+extern float yaw;
+
+// LED
+extern led_status_t led_red;
+extern led_status_t led_green;
+extern led_status_t led_blue;
