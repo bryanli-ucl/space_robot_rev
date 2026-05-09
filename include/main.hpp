@@ -4,6 +4,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
 #include <Wire.h>
 #include <mbed.h>
 
@@ -76,6 +77,13 @@ enum class PINS : uint8_t {
 
     // Buttons and LEDs
 
+    RED_LED_PIN   = LEDR,
+    GREED_LED_PIN = LEDG,
+    BLUE_LED_PIN  = LEDB,
+
+    REVIVING_BUTTON_PIN   = D22,
+    KILLSWITCH_BUTTON_PIN = D23,
+
     // IR Arrays
     IR_CTRL_O = D18,
     IR_CTRL_E = D19,
@@ -102,7 +110,7 @@ constexpr int ROBOT_ID = 12;
 // Server info
 constexpr const char* SSID      = "BD4B Hyperoptic 1Gb Fibre 2.4Ghz";
 constexpr const char* PWD       = "3R9gfN4up9ar";
-constexpr const char* SERVER_IP = "192.168.1.211";
+constexpr const char* SERVER_IP = "192.168.1.120";
 constexpr int SERVER_PORT       = 8080;
 
 }; // namespace CONFIG
@@ -115,7 +123,7 @@ constexpr int MID   = 0b0100;
 
 // Global Vars
 
-enum class led_status_t {
+enum class LEDStatus {
     ON,
     OFF,
     BLINK,
@@ -134,14 +142,15 @@ extern volatile int16_t dist_right;
 
 // IR
 extern uint16_t ir_vals[9];
+extern volatile uint16_t ir_pos;
 
 // RFID
 extern volatile uint32_t detected_uid;
 
 // IMU
-extern float yaw;
+extern volatile float yaw;
 
 // LED
-extern led_status_t led_red;
-extern led_status_t led_green;
-extern led_status_t led_blue;
+extern LEDStatus led_red;
+extern LEDStatus led_green;
+extern LEDStatus led_blue;

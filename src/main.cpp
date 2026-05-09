@@ -26,6 +26,8 @@ MFRC522_I2C rfid(static_cast<byte>(I2C_ADDR::RFID), static_cast<byte>(-1), &Wire
 
 ICM_20948_I2C imu;
 
+WiFiUDP udp;
+
 // Function Prototypes
 void serial_tx(const char* fmt, ...);
 
@@ -35,6 +37,14 @@ void func_wifi_server();
 void func_chassis();
 void func_mission();
 void func_sensors();
+
+// State Machine Define
+enum class ButtonState {
+    STOPPED,
+    REVIVING,
+    NORMAL,
+};
+ButtonState button_state = ButtonState::STOPPED;
 
 void setup() {
     task_heartbeat.start(func_heartbeat);
@@ -62,17 +72,18 @@ volatile int16_t dist_right = 0;
 
 // IR
 uint16_t ir_vals[9];
+volatile uint16_t ir_pos;
 
 // RFID
 volatile uint32_t detected_uid = 0;
 
 // IMU
-float yaw = 0;
+volatile float yaw = 0;
 
 // LED
-led_status_t led_red   = led_status_t::OFF;
-led_status_t led_green = led_status_t::OFF;
-led_status_t led_blue  = led_status_t::BLINK;
+LEDStatus led_red   = LEDStatus::OFF;
+LEDStatus led_green = LEDStatus::OFF;
+LEDStatus led_blue  = LEDStatus::BLINK;
 
 void func_mission() {
     ThisThread::sleep_for(1000ms);
@@ -142,7 +153,7 @@ void func_sensors() {
     float radius_y = 0.f;
     float radius_z = 0.f;
 
-    auto imu_calibrate = [&]() {
+    auto __unused imu_calibrate = [&]() {
         float min_x = INT_MAX, max_x = INT_MIN;
         float min_y = INT_MAX, max_y = INT_MIN;
         float min_z = INT_MAX, max_z = INT_MIN;
@@ -203,13 +214,13 @@ void func_sensors() {
 
         // IR Array
 
-        uint16_t position = qtr.readLineBlack(ir_vals);
+        ir_pos = qtr.readLineBlack(ir_vals);
 
         // Ultrasonic
 
         dist_front = usf.measureDistanceCm(us_temperature);
-        dist_front = usf.measureDistanceCm(us_temperature);
-        dist_front = usf.measureDistanceCm(us_temperature);
+        dist_left  = usl.measureDistanceCm(us_temperature);
+        dist_right = usr.measureDistanceCm(us_temperature);
 
         // RFID
 
@@ -278,15 +289,24 @@ void func_sensors() {
         }
 
         if (mbutton & MOUSE::LEFT) {
-            led_red = led_status_t::BLINK;
-        } else {
-            led_red = led_status_t::OFF;
+            // Left Click
+            mx = 0;
+            my = 0;
+            mz = 0;
         }
 
         if (mbutton & MOUSE::RIGHT) {
-            led_green = led_status_t::BLINK;
-        } else {
-            led_green = led_status_t::OFF;
+            // Right Click
+            mx = 0;
+            my = 0;
+            mz = 0;
+        }
+
+        if (mbutton & MOUSE::MID) {
+            // Mid Click
+            mx = 0;
+            my = 0;
+            mz = 0;
         }
 
         ThisThread::sleep_for(100ms);
@@ -318,25 +338,72 @@ void func_wifi_server() {
         return;
     }
 
+    // Connect WiFi
     if (WiFi.status() == WL_CONNECTED) {
-        serial_tx("WiFi was connected, IP: %s\n", WiFi.localIP().toString().c_str());
-        return;
-    }
-
-    WiFi.begin(CONFIG::SSID, CONFIG::PWD);
-
-    while (WiFi.localIP()[0] == 0) {
-        static int attemps = 100;
-        if (attemps-- == 0) {
-            serial_tx("Cannot get local IP\n");
-            break;
+        serial_tx("WiFi already connected, IP: %s\n", WiFi.localIP().toString().c_str());
+    } else {
+        WiFi.begin(CONFIG::SSID, CONFIG::PWD);
+        int attempts = 0;
+        while (WiFi.status() != WL_CONNECTED && attempts < 100) {
+            ThisThread::sleep_for(100ms);
+            attempts++;
         }
-        ThisThread::sleep_for(100ms);
+        if (WiFi.status() != WL_CONNECTED) {
+            serial_tx("WiFi connection failed\n");
+            return;
+        }
+        serial_tx("WiFi connected, IP: %s\n", WiFi.localIP().toString().c_str());
     }
-    serial_tx("Local IP: %s\n", WiFi.localIP().toString().c_str());
 
-    if (WiFi.ping("192.168.1.1") == -1) {
-        serial_tx("Server Not Found\n");
+    // Start UDP
+    udp.begin(CONFIG::SERVER_PORT);
+    serial_tx("UDP started on port %d, target PC: %s:%d\n",
+    CONFIG::SERVER_PORT, CONFIG::SERVER_IP, CONFIG::SERVER_PORT);
+
+    while (1) {
+        // Send sensor data to PC
+        char tx_buf[256];
+        int tx_len = snprintf(tx_buf, sizeof(tx_buf),
+        "%d,%d,%d,%d,%.2f,%ld,%ld,%u,%u",
+        CONFIG::ROBOT_ID,
+        (int)dist_front,
+        (int)dist_left,
+        (int)dist_right,
+        (float)yaw,
+        (long)mx,
+        (long)my,
+        (unsigned int)ir_pos,
+        (unsigned int)mbutton);
+
+        udp.beginPacket(CONFIG::SERVER_IP, CONFIG::SERVER_PORT);
+        udp.write((const uint8_t*)tx_buf, tx_len);
+        udp.endPacket();
+
+        // Receive data from PC
+        int packet_size = udp.parsePacket();
+        if (packet_size) {
+            char rx_buf[256];
+            int len = udp.read(rx_buf, sizeof(rx_buf) - 1);
+            if (len > 0) {
+                rx_buf[len] = '\0';
+                serial_tx("UDP RX [%s:%d]: %s\n", udp.remoteIP().toString().c_str(), udp.remotePort(), rx_buf);
+
+                // Parse Command
+
+                String cmd = String(rx_buf, len);
+                cmd.toLowerCase();
+
+                if (cmd == "stop") {
+                    if (button_state != ButtonState::STOPPED) {
+                        button_state = ButtonState::STOPPED;
+                    } else {
+                        button_state = ButtonState::NORMAL;
+                    }
+                }
+            }
+        }
+
+        ThisThread::sleep_for(100ms);
     }
 }
 
@@ -372,54 +439,119 @@ void func_serial_debug() {
 
 void func_heartbeat() {
 
-    constexpr int red_led_pin   = LED_RED;
-    constexpr int green_led_pin = LED_GREEN;
-    constexpr int blue_led_pin  = LED_BLUE;
+    // led signals
 
-    pinMode(red_led_pin, OUTPUT);
-    pinMode(green_led_pin, OUTPUT);
-    pinMode(blue_led_pin, OUTPUT);
+    GPIO_TypeDef* RED_LED_GPIOX   = GPIOI;
+    GPIO_TypeDef* GREEN_LED_GPIOX = GPIOJ;
+    GPIO_TypeDef* BLUE_LED_GPIOX  = GPIOE;
 
-    digitalWrite(red_led_pin, HIGH);
-    digitalWrite(green_led_pin, HIGH);
-    digitalWrite(blue_led_pin, HIGH);
+    constexpr int RED_LED_GPIO_PIN   = GPIO_PIN_12;
+    constexpr int GREEN_LED_GPIO_PIN = GPIO_PIN_13;
+    constexpr int BLUE_LED_GPIO_PIN  = GPIO_PIN_3;
+
+    pinMode((int)PINS::RED_LED_PIN, OUTPUT);
+    pinMode((int)PINS::GREED_LED_PIN, OUTPUT);
+    pinMode((int)PINS::BLUE_LED_PIN, OUTPUT);
+
+    digitalWrite((int)PINS::RED_LED_PIN, HIGH);
+    digitalWrite((int)PINS::GREED_LED_PIN, HIGH);
+    digitalWrite((int)PINS::BLUE_LED_PIN, HIGH);
 
     volatile bool toggle = false;
 
+    // Button Detect
+
+    pinMode((int)PINS::REVIVING_BUTTON_PIN, INPUT_PULLUP);
+    pinMode((int)PINS::KILLSWITCH_BUTTON_PIN, INPUT_PULLUP);
+
+    int8_t reviving_stable = 0;
+
     while (1) {
+
+        // Serial Heart beat
         static int heart_beat_cnt = 0;
         if (heart_beat_cnt-- == 0) {
             serial_tx("Heart Beat: %ums\n", millis());
-            heart_beat_cnt = 40;
+            heart_beat_cnt = 500;
         }
 
+        // led signals
         static int blink_cnt = 0;
         if (blink_cnt-- == 0) {
             toggle    = !toggle;
-            blink_cnt = 10;
+            blink_cnt = 50;
         }
 
-        if (led_red == led_status_t::ON)
-            digitalWrite(red_led_pin, LOW);
-        else if (led_red == led_status_t::OFF)
-            digitalWrite(red_led_pin, HIGH);
-        else if (led_red == led_status_t::BLINK)
-            digitalWrite(red_led_pin, toggle ? LOW : HIGH);
+        if (led_red == LEDStatus::OFF)
+            HAL_GPIO_WritePin(RED_LED_GPIOX, RED_LED_GPIO_PIN, GPIO_PIN_SET);
+        else if (led_red == LEDStatus::ON)
+            HAL_GPIO_WritePin(RED_LED_GPIOX, RED_LED_GPIO_PIN, GPIO_PIN_RESET);
+        else if (led_red == LEDStatus::BLINK)
+            HAL_GPIO_WritePin(RED_LED_GPIOX, RED_LED_GPIO_PIN, toggle ? GPIO_PIN_SET : GPIO_PIN_RESET);
 
-        if (led_green == led_status_t::ON)
-            digitalWrite(green_led_pin, LOW);
-        else if (led_green == led_status_t::OFF)
-            digitalWrite(green_led_pin, HIGH);
-        else if (led_green == led_status_t::BLINK)
-            digitalWrite(green_led_pin, toggle ? LOW : HIGH);
+        if (led_green == LEDStatus::OFF)
+            HAL_GPIO_WritePin(GREEN_LED_GPIOX, GREEN_LED_GPIO_PIN, GPIO_PIN_SET);
+        else if (led_green == LEDStatus::ON)
+            HAL_GPIO_WritePin(GREEN_LED_GPIOX, GREEN_LED_GPIO_PIN, GPIO_PIN_RESET);
+        else if (led_green == LEDStatus::BLINK)
+            HAL_GPIO_WritePin(GREEN_LED_GPIOX, GREEN_LED_GPIO_PIN, toggle ? GPIO_PIN_SET : GPIO_PIN_RESET);
 
-        if (led_blue == led_status_t::ON)
-            digitalWrite(blue_led_pin, LOW);
-        else if (led_blue == led_status_t::OFF)
-            digitalWrite(blue_led_pin, HIGH);
-        else if (led_blue == led_status_t::BLINK)
-            digitalWrite(blue_led_pin, toggle ? LOW : HIGH);
+        if (led_blue == LEDStatus::OFF)
+            HAL_GPIO_WritePin(BLUE_LED_GPIOX, BLUE_LED_GPIO_PIN, GPIO_PIN_SET);
+        else if (led_blue == LEDStatus::ON)
+            HAL_GPIO_WritePin(BLUE_LED_GPIOX, BLUE_LED_GPIO_PIN, GPIO_PIN_RESET);
+        else if (led_blue == LEDStatus::BLINK)
+            HAL_GPIO_WritePin(BLUE_LED_GPIOX, BLUE_LED_GPIO_PIN, toggle ? GPIO_PIN_SET : GPIO_PIN_RESET);
 
-        ThisThread::sleep_for(50ms);
+        // buttons detection
+        if (digitalRead((int)PINS::KILLSWITCH_BUTTON_PIN) == LOW) {
+            // Kill Switch Pressed
+            if (reviving_stable++ == 20) {
+                if (button_state == ButtonState::STOPPED) {
+                    button_state = ButtonState::NORMAL;
+                } else {
+                    button_state = ButtonState::STOPPED;
+                }
+            }
+        } else {
+            // Kill Switch unPressed
+            reviving_stable = 0;
+            if (digitalRead((int)PINS::REVIVING_BUTTON_PIN) == LOW) {
+                // REVIVING_BUTTON Pressed
+                if (button_state == ButtonState::NORMAL) {
+                    button_state = ButtonState::REVIVING;
+                }
+            } else {
+                // REVIVING_BUTTON unPressed
+                if (button_state == ButtonState::REVIVING) {
+                    button_state = ButtonState::NORMAL;
+                }
+            }
+        }
+
+        // ===============================================
+        // =============== Main Logic ====================
+        // ===============================================
+
+        // Button Logic
+        switch (button_state) {
+        case ButtonState::NORMAL:
+            led_red   = LEDStatus::ON;
+            led_green = LEDStatus::OFF;
+            led_blue  = LEDStatus::OFF;
+            break;
+        case ButtonState::STOPPED:
+            led_red   = LEDStatus::BLINK;
+            led_green = LEDStatus::OFF;
+            led_blue  = LEDStatus::OFF;
+            break;
+        case ButtonState::REVIVING:
+            led_red   = LEDStatus::OFF;
+            led_green = LEDStatus::ON;
+            led_blue  = LEDStatus::OFF;
+            break;
+        }
+
+        ThisThread::sleep_for(10ms);
     }
 }
