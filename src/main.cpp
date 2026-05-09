@@ -205,7 +205,6 @@ void func_sensors() {
 
         uint16_t position = qtr.readLineBlack(ir_vals);
 
-
         // Ultrasonic
 
         dist_front = usf.measureDistanceCm(us_temperature);
@@ -271,6 +270,7 @@ void func_sensors() {
         }
 
         // Mouse
+
         if (!mouse.connected()) {
             if (mouse.connect()) {
                 serial_tx("Mouse connected\n");
