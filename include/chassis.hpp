@@ -55,9 +55,14 @@ class Chassis {
     float get_vrl() const { return vrl; };
     float get_vrr() const { return vrr; };
 
+    void enable() { is_enable = true; }
+    void disable() { is_enable = false; }
+
     void update(std::chrono::microseconds dt);
 
     private:
+    bool is_enable;
+
     float L;
     float W;
     float R;

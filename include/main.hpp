@@ -24,6 +24,7 @@
 
 // My peripherals
 
+#include "MadgwickAHRS.h"
 #include "chassis.hpp"
 #include <HCSR04.h>
 #include <ICM_20948.h>
@@ -113,6 +114,15 @@ constexpr const char* PWD       = "3R9gfN4up9ar";
 constexpr const char* SERVER_IP = "192.168.1.120";
 constexpr int SERVER_PORT       = 8080;
 
+// IMU Magnetometer Calibration (hard-iron / soft-iron)
+// Run calibration once, read the printed values from serial, then update these constants.
+constexpr float MAG_OFF_X   = 0.0f;
+constexpr float MAG_OFF_Y   = 0.0f;
+constexpr float MAG_OFF_Z   = 0.0f;
+constexpr float MAG_SCALE_X = 1.0f;
+constexpr float MAG_SCALE_Y = 1.0f;
+constexpr float MAG_SCALE_Z = 1.0f;
+
 }; // namespace CONFIG
 
 namespace MOUSE {
@@ -151,9 +161,50 @@ extern volatile uint16_t ir_pos;
 extern volatile uint32_t detected_uid;
 
 // IMU
-extern volatile float yaw;
 
 // LED
 extern LEDStatus led_red;
 extern LEDStatus led_green;
 extern LEDStatus led_blue;
+
+// State Machine Define
+enum class ButtonState {
+    STOPPED,
+    REVIVING,
+    IDLE,
+};
+extern ButtonState button_state;
+
+enum class MotionState {
+    IDLE,
+    LINE_FOLLOW,
+    WALL_FOLLOW,
+};
+extern MotionState motion_state;
+
+
+// Devices
+extern USBHostMouse mouse;
+
+extern class Motor mfl;
+extern class Motor mfr;
+extern class Motor mrl;
+extern class Motor mrr;
+extern class Chassis chassis;
+
+extern UltraSonicDistanceSensor usf;
+extern UltraSonicDistanceSensor usl;
+extern UltraSonicDistanceSensor usr;
+
+extern QTRSensors qtr;
+
+extern MFRC522_I2C rfid;
+
+extern ICM_20948_I2C imu;
+extern Madgwick ahrs;
+
+extern WiFiUDP udp;
+
+
+// Function Prototype
+void serial_tx(const char* fmt, ...);

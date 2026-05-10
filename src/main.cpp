@@ -1,5 +1,4 @@
 #include "main.hpp"
-#include "madgwick.hpp"
 
 Thread task_heartbeat(osPriorityBelowNormal7);
 Thread task_serial_debug(osPriorityBelowNormal4);
@@ -26,6 +25,7 @@ QTRSensors qtr;
 MFRC522_I2C rfid(static_cast<byte>(I2C_ADDR::RFID), static_cast<byte>(-1), &Wire1);
 
 ICM_20948_I2C imu;
+Madgwick ahrs;
 
 WiFiUDP udp;
 
@@ -40,12 +40,8 @@ void func_mission();
 void func_sensors();
 
 // State Machine Define
-enum class ButtonState {
-    STOPPED,
-    REVIVING,
-    NORMAL,
-};
 ButtonState button_state = ButtonState::STOPPED;
+MotionState motion_state = MotionState::IDLE;
 
 void setup() {
     task_heartbeat.start(func_heartbeat);
@@ -97,59 +93,6 @@ LEDStatus led_red   = LEDStatus::OFF;
 LEDStatus led_green = LEDStatus::OFF;
 LEDStatus led_blue  = LEDStatus::BLINK;
 
-void func_mission() {
-    ThisThread::sleep_for(1000ms);
-    while (1) {
-        chassis.set_target(mx / 1000.f, my / 1000.f, 0);
-
-        // ===============================================
-        // =============== Main Logic ====================
-        // ===============================================
-
-        // Button Logic
-        switch (button_state) {
-        case ButtonState::NORMAL:
-            led_red   = LEDStatus::ON;
-            led_green = LEDStatus::OFF;
-            led_blue  = LEDStatus::OFF;
-            break;
-        case ButtonState::STOPPED:
-            led_red   = LEDStatus::BLINK;
-            led_green = LEDStatus::OFF;
-            led_blue  = LEDStatus::OFF;
-            break;
-        case ButtonState::REVIVING:
-            led_red   = LEDStatus::OFF;
-            led_green = LEDStatus::ON;
-            led_blue  = LEDStatus::OFF;
-            break;
-        }
-
-        // WiFi
-        while (!mail_udp_cmd.empty()) {
-            std::array<char, 256>* cmd_ptr = mail_udp_cmd.try_get();
-
-            String cmd = String(cmd_ptr->data());
-            serial_tx("Wifi Command: %s\n", cmd.c_str());
-
-            if (cmd == "linefollow") {
-
-            } else if (cmd == "wallfollow") {
-
-            } else if (cmd == "start") {
-                if (button_state == ButtonState::STOPPED) {
-                    button_state = ButtonState::NORMAL;
-                }
-            } else if (cmd == "stop") {
-                if (button_state != ButtonState::STOPPED) {
-                    button_state = ButtonState::STOPPED;
-                }
-            }
-        }
-
-        ThisThread::sleep_for(10ms);
-    }
-}
 
 void func_sensors() {
 
@@ -199,24 +142,24 @@ void func_sensors() {
         serial_tx("IMU init fail\n");
     }
 
-    float mag_scale_x = 1.f;
-    float mag_scale_y = 1.f;
-    float mag_scale_z = 1.f;
+    ahrs.begin(100.0f);
 
-    float mag_off_x = 0.f;
-    float mag_off_y = 0.f;
-    float mag_off_z = 0.f;
+    // Load pre-calibrated magnetometer params (update these in main.hpp after running calibration)
+    float mag_scale_x = CONFIG::MAG_SCALE_X;
+    float mag_scale_y = CONFIG::MAG_SCALE_Y;
+    float mag_scale_z = CONFIG::MAG_SCALE_Z;
 
-    float radius_x = 0.f;
-    float radius_y = 0.f;
-    float radius_z = 0.f;
+    float mag_off_x = CONFIG::MAG_OFF_X;
+    float mag_off_y = CONFIG::MAG_OFF_Y;
+    float mag_off_z = CONFIG::MAG_OFF_Z;
 
-    auto __unused imu_calibrate = [&]() {
+    char imu_calibrate = 1;
+    if (imu_calibrate) {
         float min_x = INT_MAX, max_x = INT_MIN;
         float min_y = INT_MAX, max_y = INT_MIN;
         float min_z = INT_MAX, max_z = INT_MIN;
 
-        serial_tx("imu_calibratem Begin\n");
+        serial_tx("imu_calibrate Begin\n");
 
         unsigned long start = millis();
         while (millis() - start < 10000) {
@@ -237,16 +180,14 @@ void func_sensors() {
             ThisThread::sleep_for(20ms);
         }
 
-        // Hard-iron offset = center of the ellipsoid
         mag_off_x = (min_x + max_x) / 2.0f;
         mag_off_y = (min_y + max_y) / 2.0f;
         mag_off_z = (min_z + max_z) / 2.0f;
 
-        // Soft-iron scale = make each axis radius equal
-        radius_x    = (max_x - min_x) / 2.0f;
-        radius_y    = (max_y - min_y) / 2.0f;
-        radius_z    = (max_z - min_z) / 2.0f;
-        float avg_r = (radius_x + radius_y + radius_z) / 3.0f;
+        float radius_x = (max_x - min_x) / 2.0f;
+        float radius_y = (max_y - min_y) / 2.0f;
+        float radius_z = (max_z - min_z) / 2.0f;
+        float avg_r    = (radius_x + radius_y + radius_z) / 3.0f;
 
         if (avg_r > 0.1f) {
             mag_scale_x = avg_r / radius_x;
@@ -254,11 +195,10 @@ void func_sensors() {
             mag_scale_z = avg_r / radius_z;
         }
 
-        serial_tx("imu_calibratem Done\n");
+        serial_tx("imu_calibrate Done\n");
         serial_tx("Offset (uT): %f %f %f\n", mag_off_x, mag_off_y, mag_off_z);
-        serial_tx("Radius (uT): %f %f %f\n", mag_off_x, mag_off_y, mag_off_z);
-    };
-    // imu_calibrate();
+        serial_tx("Scale  (uT): %f %f %f\n", mag_scale_x, mag_scale_y, mag_scale_z);
+    }
 
     // Mouse
     serial_tx("Mouse Init\n");
@@ -267,11 +207,10 @@ void func_sensors() {
     mouse.attachYEvent([](int8_t v) { my -= v; });
     mouse.attachZEvent([](int8_t v) { mz += v; });
 
-    Madgwick ahrs;
-    ahrs.begin(100.0f);
 
     while (1) {
-        // IMU: update at 100 Hz for best Madgwick performance
+
+        // IMU
         if (imu.dataReady()) {
             imu.getAGMT();
 
@@ -283,19 +222,17 @@ void func_sensors() {
             float gy = imu.gyrY();
             float gz = imu.gyrZ();
 
-            float mx = imu.magX();
-            float my = imu.magY();
-            float mz = imu.magZ();
+            float mx = (imu.magX() - mag_off_x) * mag_scale_x;
+            float my = (imu.magY() - mag_off_y) * mag_scale_y;
+            float mz = (imu.magZ() - mag_off_z) * mag_scale_z;
 
-            ahrs.update({ax, ay, az}, {gx, gy, gz}, {mx, my, mz}, 0.01f);
-            yaw = ahrs.get_yaw() * RAD_TO_DEG;
-            if (yaw < 0.f) yaw += 360.f;
+            ahrs.update(gx, gy, gz, ax, ay, az, mx, my, mz);
+            yaw = ahrs.getYaw();
         }
 
-        // Slow sensors: IR, Ultrasonic, RFID every 100 ms
         static int slow_cnt = 0;
-        if (++slow_cnt >= 10) {
-            slow_cnt = 0;
+        if (slow_cnt-- == 0) {
+            slow_cnt = 10;
 
             // IR Array
             ir_pos = qtr.readLineBlack(ir_vals);
@@ -312,31 +249,19 @@ void func_sensors() {
             //         serial_tx("New Tag Detected, size: %d, uid: %d\n", rfid.uid.size, detected_uid);
             //     }
             // }
-        }
 
-        // Mouse
-        if (!mouse.connected()) {
-            if (mouse.connect()) {
-                serial_tx("Mouse connected\n");
+            // Mouse
+            if (!mouse.connected()) {
+                if (mouse.connect()) {
+                    serial_tx("Mouse connected\n");
+                }
             }
-        }
 
-        if (mbutton & MOUSE::LEFT) {
-            mx = 0;
-            my = 0;
-            mz = 0;
-        }
-
-        if (mbutton & MOUSE::RIGHT) {
-            mx = 0;
-            my = 0;
-            mz = 0;
-        }
-
-        if (mbutton & MOUSE::MID) {
-            mx = 0;
-            my = 0;
-            mz = 0;
+            if (mbutton & MOUSE::LEFT) {
+                mx = 0, my = 0, mz = 0;
+            }
+            if (mbutton & MOUSE::RIGHT) {}
+            if (mbutton & MOUSE::MID) {}
         }
 
         ThisThread::sleep_for(10ms);
@@ -486,7 +411,7 @@ void func_heartbeat() {
     pinMode((int)PINS::REVIVING_BUTTON_PIN, INPUT_PULLUP);
     pinMode((int)PINS::KILLSWITCH_BUTTON_PIN, INPUT_PULLUP);
 
-    int8_t reviving_stable = 0;
+    int8_t kill_btn_stable = 0;
 
     while (1) {
 
@@ -528,25 +453,25 @@ void func_heartbeat() {
         // buttons detection
         if (digitalRead((int)PINS::KILLSWITCH_BUTTON_PIN) == LOW) {
             // Kill Switch Pressed
-            if (reviving_stable++ == 20) {
+            if (kill_btn_stable++ == 20) {
                 if (button_state == ButtonState::STOPPED) {
-                    button_state = ButtonState::NORMAL;
+                    button_state = ButtonState::IDLE;
                 } else {
                     button_state = ButtonState::STOPPED;
                 }
             }
         } else {
             // Kill Switch unPressed
-            reviving_stable = 0;
+            kill_btn_stable = 0;
             if (digitalRead((int)PINS::REVIVING_BUTTON_PIN) == LOW) {
                 // REVIVING_BUTTON Pressed
-                if (button_state == ButtonState::NORMAL) {
+                if (button_state == ButtonState::IDLE) {
                     button_state = ButtonState::REVIVING;
                 }
             } else {
                 // REVIVING_BUTTON unPressed
                 if (button_state == ButtonState::REVIVING) {
-                    button_state = ButtonState::NORMAL;
+                    button_state = ButtonState::IDLE;
                 }
             }
         }

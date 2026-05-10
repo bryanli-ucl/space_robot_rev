@@ -127,6 +127,14 @@ void Chassis::set_paras(float l, float w, float r) {
 }
 
 void Chassis::update(std::chrono::microseconds dt) {
+    if (!is_enable) {
+        fl.write_pwm(0);
+        fr.write_pwm(0);
+        rl.write_pwm(0);
+        rr.write_pwm(0);
+        return;
+    }
+
     fl.update(dt);
     fr.update(dt);
     rl.update(dt);
