@@ -1,4 +1,5 @@
 #include "main.hpp"
+#include "madgwick.hpp"
 
 Thread task_heartbeat(osPriorityBelowNormal7);
 Thread task_serial_debug(osPriorityBelowNormal4);
@@ -59,6 +60,17 @@ void loop() {
     ThisThread::sleep_for(10s);
 }
 
+// Field
+struct FieldUnit {
+    uint32_t uid;
+    bool fertile;
+    float dist_of_front;
+    float dist_of_left;
+    float dist_of_right;
+};
+
+std::array<std::array<FieldUnit, 9>, 9> field;
+
 // Mouse
 volatile uint8_t mbutton = 0;
 volatile int32_t mx      = 0;
@@ -89,6 +101,52 @@ void func_mission() {
     ThisThread::sleep_for(1000ms);
     while (1) {
         chassis.set_target(mx / 1000.f, my / 1000.f, 0);
+
+        // ===============================================
+        // =============== Main Logic ====================
+        // ===============================================
+
+        // Button Logic
+        switch (button_state) {
+        case ButtonState::NORMAL:
+            led_red   = LEDStatus::ON;
+            led_green = LEDStatus::OFF;
+            led_blue  = LEDStatus::OFF;
+            break;
+        case ButtonState::STOPPED:
+            led_red   = LEDStatus::BLINK;
+            led_green = LEDStatus::OFF;
+            led_blue  = LEDStatus::OFF;
+            break;
+        case ButtonState::REVIVING:
+            led_red   = LEDStatus::OFF;
+            led_green = LEDStatus::ON;
+            led_blue  = LEDStatus::OFF;
+            break;
+        }
+
+        // WiFi
+        while (!mail_udp_cmd.empty()) {
+            std::array<char, 256>* cmd_ptr = mail_udp_cmd.try_get();
+
+            String cmd = String(cmd_ptr->data());
+            serial_tx("Wifi Command: %s\n", cmd.c_str());
+
+            if (cmd == "linefollow") {
+
+            } else if (cmd == "wallfollow") {
+
+            } else if (cmd == "start") {
+                if (button_state == ButtonState::STOPPED) {
+                    button_state = ButtonState::NORMAL;
+                }
+            } else if (cmd == "stop") {
+                if (button_state != ButtonState::STOPPED) {
+                    button_state = ButtonState::STOPPED;
+                }
+            }
+        }
+
         ThisThread::sleep_for(10ms);
     }
 }
@@ -200,7 +258,6 @@ void func_sensors() {
         serial_tx("Offset (uT): %f %f %f\n", mag_off_x, mag_off_y, mag_off_z);
         serial_tx("Radius (uT): %f %f %f\n", mag_off_x, mag_off_y, mag_off_z);
     };
-
     // imu_calibrate();
 
     // Mouse
@@ -210,29 +267,11 @@ void func_sensors() {
     mouse.attachYEvent([](int8_t v) { my -= v; });
     mouse.attachZEvent([](int8_t v) { mz += v; });
 
+    Madgwick ahrs;
+    ahrs.begin(100.0f);
+
     while (1) {
-
-        // IR Array
-
-        ir_pos = qtr.readLineBlack(ir_vals);
-
-        // Ultrasonic
-
-        dist_front = usf.measureDistanceCm(us_temperature);
-        dist_left  = usl.measureDistanceCm(us_temperature);
-        dist_right = usr.measureDistanceCm(us_temperature);
-
-        // RFID
-
-        // if (rfid.PICC_IsNewCardPresent()) {
-        //     if (rfid.PICC_ReadCardSerial()) {
-        //         detected_uid = reinterpret_cast<uint32_t*>(rfid.uid.uidByte)[0];
-        //         serial_tx("New Tag Detected, size: %d, uid: %d\n", rfid.uid.size, detected_uid);
-        //     }
-        // }
-
-        // IMU
-
+        // IMU: update at 100 Hz for best Madgwick performance
         if (imu.dataReady()) {
             imu.getAGMT();
 
@@ -240,48 +279,42 @@ void func_sensors() {
             float ay = imu.accY();
             float az = imu.accZ();
 
-            // float gx = imu.gyrX();
-            // float gy = imu.gyrY();
-            // float gz = imu.gyrZ();
+            float gx = imu.gyrX();
+            float gy = imu.gyrY();
+            float gz = imu.gyrZ();
 
             float mx = imu.magX();
             float my = imu.magY();
             float mz = imu.magZ();
 
-            // 1. Normalize accelerometer to get gravity vector
-
-            float norm = sqrtf(ax * ax + ay * ay + az * az);
-
-            norm = (norm < 1) ? 1 : norm;
-
-            ax = ax / norm;
-            ay = ay / norm;
-            az = az / norm;
-
-            // 2. Roll and Pitch
-
-            float roll  = atan2f(ay, az);
-            float pitch = atan2f(-ax, sqrtf(ay * ay + az * az));
-
-            // 3. Tilt-compensated magnetometer
-
-            float sinr = sinf(roll);
-            float cosr = cosf(roll);
-
-            float sinp = sinf(pitch);
-            float cosp = cosf(pitch);
-
-            float mx_comp = mx * cosp + my * sinr + mz * cosr * sinp;
-            float my_comp = my * cosr - mz * sinr;
-
-            // 4. compute Yaw
-
-            yaw = atan2f(-my_comp, mx_comp) * RAD_TO_DEG;
+            ahrs.update({ax, ay, az}, {gx, gy, gz}, {mx, my, mz}, 0.01f);
+            yaw = ahrs.get_yaw() * RAD_TO_DEG;
             if (yaw < 0.f) yaw += 360.f;
         }
 
-        // Mouse
+        // Slow sensors: IR, Ultrasonic, RFID every 100 ms
+        static int slow_cnt = 0;
+        if (++slow_cnt >= 10) {
+            slow_cnt = 0;
 
+            // IR Array
+            ir_pos = qtr.readLineBlack(ir_vals);
+
+            // Ultrasonic
+            dist_front = usf.measureDistanceCm(us_temperature);
+            dist_left  = usl.measureDistanceCm(us_temperature);
+            dist_right = usr.measureDistanceCm(us_temperature);
+
+            // RFID
+            // if (rfid.PICC_IsNewCardPresent()) {
+            //     if (rfid.PICC_ReadCardSerial()) {
+            //         detected_uid = reinterpret_cast<uint32_t*>(rfid.uid.uidByte)[0];
+            //         serial_tx("New Tag Detected, size: %d, uid: %d\n", rfid.uid.size, detected_uid);
+            //     }
+            // }
+        }
+
+        // Mouse
         if (!mouse.connected()) {
             if (mouse.connect()) {
                 serial_tx("Mouse connected\n");
@@ -289,27 +322,24 @@ void func_sensors() {
         }
 
         if (mbutton & MOUSE::LEFT) {
-            // Left Click
             mx = 0;
             my = 0;
             mz = 0;
         }
 
         if (mbutton & MOUSE::RIGHT) {
-            // Right Click
             mx = 0;
             my = 0;
             mz = 0;
         }
 
         if (mbutton & MOUSE::MID) {
-            // Mid Click
             mx = 0;
             my = 0;
             mz = 0;
         }
 
-        ThisThread::sleep_for(100ms);
+        ThisThread::sleep_for(10ms);
     }
 }
 
@@ -332,6 +362,7 @@ void func_chassis() {
 // ================== About Debug and Display =================
 // ============================================================
 
+Mail<std::array<char, 256>, 64> mail_udp_cmd;
 void func_wifi_server() {
     if (CONFIG::SSID == nullptr) {
         serial_tx("Please set CONFIG::SSID in main.hpp\n");
@@ -382,25 +413,16 @@ void func_wifi_server() {
         // Receive data from PC
         int packet_size = udp.parsePacket();
         if (packet_size) {
-            char rx_buf[256];
-            int len = udp.read(rx_buf, sizeof(rx_buf) - 1);
-            if (len > 0) {
-                rx_buf[len] = '\0';
-                serial_tx("UDP RX [%s:%d]: %s\n", udp.remoteIP().toString().c_str(), udp.remotePort(), rx_buf);
+            std::array<char, 256>* mail = mail_udp_cmd.try_alloc();
 
-                // Parse Command
-
-                String cmd = String(rx_buf, len);
-                cmd.toLowerCase();
-
-                if (cmd == "stop") {
-                    if (button_state != ButtonState::STOPPED) {
-                        button_state = ButtonState::STOPPED;
-                    } else {
-                        button_state = ButtonState::NORMAL;
-                    }
-                }
+            if (mail == nullptr) {
+                udp.readString();
+                continue;
             }
+
+            udp.read(mail->data(), mail->max_size() * sizeof(std::remove_pointer<decltype(mail->data())>::type));
+            serial_tx("UDP RX [%s:%d]: %s\n", udp.remoteIP().toString().c_str(), udp.remotePort(), mail->data());
+            mail_udp_cmd.put(mail);
         }
 
         ThisThread::sleep_for(100ms);
@@ -527,29 +549,6 @@ void func_heartbeat() {
                     button_state = ButtonState::NORMAL;
                 }
             }
-        }
-
-        // ===============================================
-        // =============== Main Logic ====================
-        // ===============================================
-
-        // Button Logic
-        switch (button_state) {
-        case ButtonState::NORMAL:
-            led_red   = LEDStatus::ON;
-            led_green = LEDStatus::OFF;
-            led_blue  = LEDStatus::OFF;
-            break;
-        case ButtonState::STOPPED:
-            led_red   = LEDStatus::BLINK;
-            led_green = LEDStatus::OFF;
-            led_blue  = LEDStatus::OFF;
-            break;
-        case ButtonState::REVIVING:
-            led_red   = LEDStatus::OFF;
-            led_green = LEDStatus::ON;
-            led_blue  = LEDStatus::OFF;
-            break;
         }
 
         ThisThread::sleep_for(10ms);

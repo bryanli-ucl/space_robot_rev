@@ -1,0 +1,32 @@
+{
+  "name": "Eigen",
+  "version": "5.0.0",
+  "description": "Eigen is a C++ template library for linear algebra",
+  "keywords": [
+    "eigen",
+    "matrix",
+    "linear algebra"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://gitlab.com/libeigen/eigen.git"
+  },
+  "license": "MPL-2.0",
+  "frameworks": "*",
+  "platforms": "*",
+  "srcFilter": [
+    "+<Eigen/**>",
+    "+<unsupported/**>",
+    "-<bench/**>",
+    "-<test/**>",
+    "-<demos/**>",
+    "-<blas/**>",
+    "-<lapack/**>",
+    "-<failtest/**>",
+    "-<debug/**>",
+    "-<ci/**>",
+    "-<scripts/**>",
+    "-<doc/**>",
+    "-<cmake/**>"
+  ]
+}

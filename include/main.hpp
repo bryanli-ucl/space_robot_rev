@@ -123,6 +123,9 @@ constexpr int MID   = 0b0100;
 
 // Global Vars
 
+extern Mail<std::array<char, 256>, 64> mail_udp_cmd;
+extern Mail<std::array<char, 256>, 64> mail_serial_debug;
+
 enum class LEDStatus {
     ON,
     OFF,
