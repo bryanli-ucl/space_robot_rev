@@ -19,8 +19,12 @@
 
 #include <algorithm>
 #include <array>
+#include <map>
 #include <tuple>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
+#include <cstring>
 
 // My peripherals
 
@@ -135,6 +139,7 @@ constexpr int MID   = 0b0100;
 
 extern Mail<std::array<char, 256>, 64> mail_udp_cmd;
 extern Mail<std::array<char, 256>, 64> mail_serial_debug;
+extern Mail<std::array<char, 256>, 64> mail_wifi_tx;
 
 enum class LEDStatus {
     ON,
@@ -208,3 +213,4 @@ extern WiFiUDP udp;
 
 // Function Prototype
 void serial_tx(const char* fmt, ...);
+void wifi_tx(const char* fmt, ...);

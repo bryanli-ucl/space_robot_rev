@@ -317,23 +317,15 @@ void func_wifi_server() {
     CONFIG::SERVER_PORT, CONFIG::SERVER_IP, CONFIG::SERVER_PORT);
 
     while (1) {
-        // Send sensor data to PC
-        char tx_buf[256];
-        int tx_len = snprintf(tx_buf, sizeof(tx_buf),
-        "%d,%d,%d,%d,%.2f,%ld,%ld,%u,%u",
-        CONFIG::ROBOT_ID,
-        (int)dist_front,
-        (int)dist_left,
-        (int)dist_right,
-        (float)yaw,
-        (long)mx,
-        (long)my,
-        (unsigned int)ir_pos,
-        (unsigned int)mbutton);
-
-        udp.beginPacket(CONFIG::SERVER_IP, CONFIG::SERVER_PORT);
-        udp.write((const uint8_t*)tx_buf, tx_len);
-        udp.endPacket();
+        // Send queued wifi_tx messages
+        while (!mail_wifi_tx.empty()) {
+            std::array<char, 256>* msg = mail_wifi_tx.try_get();
+            if (msg == nullptr) break;
+            udp.beginPacket(CONFIG::SERVER_IP, CONFIG::SERVER_PORT);
+            udp.write((const uint8_t*)msg->data(), strlen(msg->data()));
+            udp.endPacket();
+            mail_wifi_tx.free(msg);
+        }
 
         // Receive data from PC
         int packet_size = udp.parsePacket();
@@ -355,6 +347,8 @@ void func_wifi_server() {
 }
 
 Mail<std::array<char, 256>, 64> mail_serial_debug;
+Mail<std::array<char, 256>, 64> mail_wifi_tx;
+
 void serial_tx(const char* fmt, ...) {
     std::array<char, 256>* mail = mail_serial_debug.try_alloc();
     if (mail == nullptr) {
@@ -367,6 +361,20 @@ void serial_tx(const char* fmt, ...) {
     va_end(args);
 
     mail_serial_debug.put(mail);
+}
+
+void wifi_tx(const char* fmt, ...) {
+    std::array<char, 256>* mail = mail_wifi_tx.try_alloc();
+    if (mail == nullptr) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(mail->data(), mail->size() * sizeof(std::remove_pointer<decltype(mail->data())>::type), fmt, args);
+    va_end(args);
+
+    mail_wifi_tx.put(mail);
 }
 
 void func_serial_debug() {
