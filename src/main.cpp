@@ -25,12 +25,10 @@ QTRSensors qtr;
 MFRC522_I2C rfid(static_cast<byte>(I2C_ADDR::RFID), static_cast<byte>(-1), &Wire1);
 
 ICM_20948_I2C imu;
-Madgwick ahrs;
 
 WiFiUDP udp;
 
 // Function Prototypes
-void serial_tx(const char* fmt, ...);
 
 void func_heartbeat();
 void func_serial_debug();
@@ -86,13 +84,15 @@ volatile uint16_t ir_pos;
 volatile uint32_t detected_uid = 0;
 
 // IMU
-volatile float yaw = 0;
+Madgwick ahrs;
 
 // LED
 LEDStatus led_red   = LEDStatus::OFF;
 LEDStatus led_green = LEDStatus::OFF;
 LEDStatus led_blue  = LEDStatus::BLINK;
 
+// Sun Light
+uint16_t sun_light;
 
 void func_sensors() {
 
@@ -135,6 +135,9 @@ void func_sensors() {
     // if (!rfid.PCD_PerformSelfTest()) {
     //     serial_tx("RFID Cannot Pass Self Test\n");
     // }
+
+    // Sun Light
+    pinMode((int)PINS::SUN_LIGHT_ADC_PIN, INPUT);
 
     // IMU
     serial_tx("IMU Init\n");
@@ -200,6 +203,8 @@ void func_sensors() {
         serial_tx("Scale  (uT): %f %f %f\n", mag_scale_x, mag_scale_y, mag_scale_z);
     }
 
+    // Sun Light
+
     // Mouse
     serial_tx("Mouse Init\n");
     mouse.attachButtonEvent([](uint8_t btn) { mbutton = btn; });
@@ -227,15 +232,18 @@ void func_sensors() {
             float mz = (imu.magZ() - mag_off_z) * mag_scale_z;
 
             ahrs.update(gx, gy, gz, ax, ay, az, mx, my, mz);
-            yaw = ahrs.getYaw();
         }
+
+        // IR Array
+        ir_pos = qtr.readLineBlack(ir_vals);
+
+        // Sun Light
+        sun_light = analogRead((int)PINS::SUN_LIGHT_ADC_PIN);
 
         static int slow_cnt = 0;
         if (slow_cnt-- == 0) {
             slow_cnt = 10;
 
-            // IR Array
-            ir_pos = qtr.readLineBlack(ir_vals);
 
             // Ultrasonic
             dist_front = usf.measureDistanceCm(us_temperature);
@@ -247,6 +255,7 @@ void func_sensors() {
             //     if (rfid.PICC_ReadCardSerial()) {
             //         detected_uid = reinterpret_cast<uint32_t*>(rfid.uid.uidByte)[0];
             //         serial_tx("New Tag Detected, size: %d, uid: %d\n", rfid.uid.size, detected_uid);
+            //         wifi_tx("New Tag Detected, size: %d, uid: %d\n", rfid.uid.size, detected_uid);
             //     }
             // }
 
@@ -287,6 +296,36 @@ void func_chassis() {
 // ================== About Debug and Display =================
 // ============================================================
 
+Mail<std::array<char, 256>, 64> mail_serial_debug;
+void serial_tx(const char* fmt, ...) {
+    std::array<char, 256>* mail = mail_serial_debug.try_alloc();
+    if (mail == nullptr) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(mail->data(), mail->size() * sizeof(std::remove_pointer<decltype(mail->data())>::type), fmt, args);
+    va_end(args);
+
+    mail_serial_debug.put(mail);
+}
+
+Mail<std::array<char, 256>, 64> mail_wifi_tx;
+void wifi_tx(const char* fmt, ...) {
+    std::array<char, 256>* mail = mail_wifi_tx.try_alloc();
+    if (mail == nullptr) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(mail->data(), mail->size() * sizeof(std::remove_pointer<decltype(mail->data())>::type), fmt, args);
+    va_end(args);
+
+    mail_wifi_tx.put(mail);
+}
+
 Mail<std::array<char, 256>, 64> mail_udp_cmd;
 void func_wifi_server() {
     if (CONFIG::SSID == nullptr) {
@@ -316,6 +355,9 @@ void func_wifi_server() {
     serial_tx("UDP started on port %d, target PC: %s:%d\n",
     CONFIG::SERVER_PORT, CONFIG::SERVER_IP, CONFIG::SERVER_PORT);
 
+    wifi_tx("UDP started on port %d, target PC: %s:%d\n",
+    CONFIG::SERVER_PORT, CONFIG::SERVER_IP, CONFIG::SERVER_PORT);
+
     while (1) {
         // Send queued wifi_tx messages
         while (!mail_wifi_tx.empty()) {
@@ -337,44 +379,16 @@ void func_wifi_server() {
                 continue;
             }
 
-            udp.read(mail->data(), mail->max_size() * sizeof(std::remove_pointer<decltype(mail->data())>::type));
+            int len = udp.read(mail->data(), mail->max_size() - 1);
+            if (len >= 0) {
+                mail->data()[len] = '\0';
+            }
             serial_tx("UDP RX [%s:%d]: %s\n", udp.remoteIP().toString().c_str(), udp.remotePort(), mail->data());
             mail_udp_cmd.put(mail);
         }
 
         ThisThread::sleep_for(100ms);
     }
-}
-
-Mail<std::array<char, 256>, 64> mail_serial_debug;
-Mail<std::array<char, 256>, 64> mail_wifi_tx;
-
-void serial_tx(const char* fmt, ...) {
-    std::array<char, 256>* mail = mail_serial_debug.try_alloc();
-    if (mail == nullptr) {
-        return;
-    }
-
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(mail->data(), mail->size() * sizeof(std::remove_pointer<decltype(mail->data())>::type), fmt, args);
-    va_end(args);
-
-    mail_serial_debug.put(mail);
-}
-
-void wifi_tx(const char* fmt, ...) {
-    std::array<char, 256>* mail = mail_wifi_tx.try_alloc();
-    if (mail == nullptr) {
-        return;
-    }
-
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(mail->data(), mail->size() * sizeof(std::remove_pointer<decltype(mail->data())>::type), fmt, args);
-    va_end(args);
-
-    mail_wifi_tx.put(mail);
 }
 
 void func_serial_debug() {

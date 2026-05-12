@@ -19,16 +19,19 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <map>
+#include <memory>
 #include <tuple>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
-#include <cstring>
+#include <vector>
 
 // My peripherals
 
 #include "MadgwickAHRS.h"
+#include "bash.hpp"
 #include "chassis.hpp"
 #include <HCSR04.h>
 #include <ICM_20948.h>
@@ -88,6 +91,9 @@ enum class PINS : uint8_t {
 
     REVIVING_BUTTON_PIN   = D22,
     KILLSWITCH_BUTTON_PIN = D23,
+
+    // Sun Light
+    SUN_LIGHT_ADC_PIN = A1,
 
     // IR Arrays
     IR_CTRL_O = D18,
@@ -166,11 +172,15 @@ extern volatile uint16_t ir_pos;
 extern volatile uint32_t detected_uid;
 
 // IMU
+extern Madgwick ahrs;
 
 // LED
 extern LEDStatus led_red;
 extern LEDStatus led_green;
 extern LEDStatus led_blue;
+
+// Sun Light
+extern uint16_t sun_light;
 
 // State Machine Define
 enum class ButtonState {
@@ -184,6 +194,7 @@ enum class MotionState {
     IDLE,
     LINE_FOLLOW,
     WALL_FOLLOW,
+    MOUSE_FOLLOW,
 };
 extern MotionState motion_state;
 
@@ -206,7 +217,6 @@ extern QTRSensors qtr;
 extern MFRC522_I2C rfid;
 
 extern ICM_20948_I2C imu;
-extern Madgwick ahrs;
 
 extern WiFiUDP udp;
 
