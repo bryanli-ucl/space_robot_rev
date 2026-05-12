@@ -50,27 +50,27 @@ enum class I2C_ADDR : uint8_t {
 
 enum class PINS : uint8_t {
     // Motors
-    MOTOR_FL_EN       = D2,
-    MOTOR_FL_FORWARD  = D25,
-    MOTOR_FL_BACKWARD = D27,
-    MOTOR_FL_ENC_A    = D32,
-    MOTOR_FL_ENC_B    = D33,
+    MOTOR_RL_EN       = D2,
+    MOTOR_RL_FORWARD  = D25,
+    MOTOR_RL_BACKWARD = D27,
+    MOTOR_RL_ENC_A    = D32,
+    MOTOR_RL_ENC_B    = D33,
 
-    MOTOR_FR_EN       = D3,
-    MOTOR_FR_FORWARD  = D29,
-    MOTOR_FR_BACKWARD = D31,
-    MOTOR_FR_ENC_A    = D34,
-    MOTOR_FR_ENC_B    = D35,
+    MOTOR_FL_EN       = D3,
+    MOTOR_FL_FORWARD  = D29,
+    MOTOR_FL_BACKWARD = D31,
+    MOTOR_FL_ENC_A    = D34,
+    MOTOR_FL_ENC_B    = D35,
 
-    MOTOR_RL_EN       = D4,
-    MOTOR_RL_FORWARD  = D24,
-    MOTOR_RL_BACKWARD = D26,
-    MOTOR_RL_ENC_A    = D36,
-    MOTOR_RL_ENC_B    = D37,
+    MOTOR_FR_EN       = D4,
+    MOTOR_FR_FORWARD  = D26,
+    MOTOR_FR_BACKWARD = D24,
+    MOTOR_FR_ENC_A    = D36,
+    MOTOR_FR_ENC_B    = D37,
 
     MOTOR_RR_EN       = D5,
-    MOTOR_RR_FORWARD  = D28,
-    MOTOR_RR_BACKWARD = D30,
+    MOTOR_RR_FORWARD  = D30,
+    MOTOR_RR_BACKWARD = D28,
     MOTOR_RR_ENC_A    = D38,
     MOTOR_RR_ENC_B    = D39,
 
@@ -85,8 +85,12 @@ enum class PINS : uint8_t {
 
     // Buttons and LEDs
 
-    RED_LED_PIN   = LEDR,
-    GREED_LED_PIN = LEDG,
+    // RED_LED_PIN   = LEDR,
+    // GREED_LED_PIN = LEDG,
+    // BLUE_LED_PIN  = LEDB,
+
+    RED_LED_PIN   = D14,
+    GREED_LED_PIN = D15,
     BLUE_LED_PIN  = LEDB,
 
     REVIVING_BUTTON_PIN   = D22,
@@ -119,9 +123,12 @@ constexpr uint16_t qtr_max[9] = { 564, 355, 356, 405, 383, 415, 432, 488, 490 };
 constexpr int ROBOT_ID = 12;
 
 // Server info
-constexpr const char* SSID      = "BD4B Hyperoptic 1Gb Fibre 2.4Ghz";
-constexpr const char* PWD       = "3R9gfN4up9ar";
-constexpr const char* SERVER_IP = "192.168.1.120";
+// constexpr const char* SSID      = "BD4B Hyperoptic 1Gb Fibre 2.4Ghz";
+constexpr const char* SSID = "PhaseSpaceNetwork_2.4G";
+// constexpr const char* PWD       = "3R9gfN4up9ar";
+constexpr const char* PWD = "8igMacNet";
+// constexpr const char* SERVER_IP = "192.168.1.120";
+constexpr const char* SERVER_IP = "192.168.0.211";
 constexpr int SERVER_PORT       = 8080;
 
 // IMU Magnetometer Calibration (hard-iron / soft-iron)
@@ -173,6 +180,8 @@ extern volatile uint32_t detected_uid;
 
 // IMU
 extern Madgwick ahrs;
+extern volatile float imu_yaw_deg;
+extern volatile bool imu_yaw_ready;
 
 // LED
 extern LEDStatus led_red;

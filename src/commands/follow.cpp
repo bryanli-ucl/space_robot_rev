@@ -18,4 +18,5 @@ static void follow(int argc, char** argv) {
         motion_state = MotionState::MOUSE_FOLLOW;
     }
 }
+
 BASH_COMMAND("follow", follow, "follow line/wall/mouse")

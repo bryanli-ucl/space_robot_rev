@@ -19,13 +19,13 @@ void func_mission() {
         }
         case ButtonState::STOPPED: {
             chassis.disable();
+
             led_red   = LEDStatus::BLINK;
             led_green = LEDStatus::OFF;
             led_blue  = LEDStatus::OFF;
             break;
         }
         case ButtonState::REVIVING: {
-            chassis.enable();
             led_red   = LEDStatus::OFF;
             led_green = LEDStatus::ON;
             led_blue  = LEDStatus::OFF;

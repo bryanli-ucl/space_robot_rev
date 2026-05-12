@@ -14,6 +14,9 @@ class Motor {
     void set_speed(float v);
     void update(std::chrono::microseconds dt);
     void write_pwm(int pwm);
+    void set_manual_pwm(int pwm);
+    void clear_manual_pwm();
+    void stop();
 
     private:
     static void ISR(void* ins_ptr);
@@ -40,6 +43,9 @@ class Motor {
     float prev_error = 0.0f;
 
     float output = 0.0f;
+
+    bool manual_pwm_enabled = false;
+    int manual_pwm          = 0;
 };
 
 class Chassis {
@@ -48,7 +54,12 @@ class Chassis {
     ~Chassis() = default;
 
     void set_target(float vx, float vy, float w);
+    void apply_target(float vx, float vy, float w);
     void set_paras(float l, float w, float r);
+
+    float get_target_vx() const { return target_vx; };
+    float get_target_vy() const { return target_vy; };
+    float get_target_w() const { return target_w; };
 
     float get_vfl() const { return vfl; };
     float get_vfr() const { return vfr; };
@@ -61,16 +72,20 @@ class Chassis {
     void update(std::chrono::microseconds dt);
 
     private:
-    bool is_enable;
+    bool is_enable = false;
 
-    float L;
-    float W;
-    float R;
+    float L = 0.0f;
+    float W = 0.0f;
+    float R = 1.0f;
 
-    float vfl;
-    float vfr;
-    float vrl;
-    float vrr;
+    float target_vx = 0.0f;
+    float target_vy = 0.0f;
+    float target_w  = 0.0f;
+
+    float vfl = 0.0f;
+    float vfr = 0.0f;
+    float vrl = 0.0f;
+    float vrr = 0.0f;
 
     Motor& fl;
     Motor& fr;

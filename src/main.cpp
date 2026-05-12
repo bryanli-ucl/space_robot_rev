@@ -22,7 +22,7 @@ UltraSonicDistanceSensor usr((int)PINS::US_RIGHT_TRIG, (int)PINS::US_RIGHT_ECHO)
 
 QTRSensors qtr;
 
-MFRC522_I2C rfid(static_cast<byte>(I2C_ADDR::RFID), static_cast<byte>(-1), &Wire1);
+MFRC522_I2C rfid(static_cast<byte>(I2C_ADDR::RFID), static_cast<byte>(-1), &Wire);
 
 ICM_20948_I2C imu;
 
@@ -85,6 +85,8 @@ volatile uint32_t detected_uid = 0;
 
 // IMU
 Madgwick ahrs;
+volatile float imu_yaw_deg  = 0.0f;
+volatile bool imu_yaw_ready = false;
 
 // LED
 LEDStatus led_red   = LEDStatus::OFF;
@@ -129,7 +131,7 @@ void func_sensors() {
 
     // RFID
     serial_tx("RFID Init\n");
-    Wire1.begin();
+    Wire.begin();
 
     // rfid.PCD_Init();
     // if (!rfid.PCD_PerformSelfTest()) {
@@ -141,7 +143,7 @@ void func_sensors() {
 
     // IMU
     serial_tx("IMU Init\n");
-    if (imu.begin(Wire1) != ICM_20948_Stat_Ok) {
+    if (imu.begin(Wire, 1) != ICM_20948_Stat_Ok) {
         serial_tx("IMU init fail\n");
     }
 
@@ -232,6 +234,8 @@ void func_sensors() {
             float mz = (imu.magZ() - mag_off_z) * mag_scale_z;
 
             ahrs.update(gx, gy, gz, ax, ay, az, mx, my, mz);
+            imu_yaw_deg   = ahrs.getYaw();
+            imu_yaw_ready = true;
         }
 
         // IR Array
@@ -277,12 +281,56 @@ void func_sensors() {
     }
 }
 
+static float wrap_deg(float angle) {
+    while (angle > 180.0f) {
+        angle -= 360.0f;
+    }
+    while (angle < -180.0f) {
+        angle += 360.0f;
+    }
+    return angle;
+}
+
 void func_chassis() {
     chassis.set_paras(1.f, 1.f, 0.05f);
     chassis.set_target(0, 0, 0);
 
+    constexpr float yaw_kp     = 0.03f;
+    constexpr float max_w_corr = 0.4f;
+    constexpr float move_eps   = 0.01f;
+    constexpr float rotate_eps = 0.01f;
+
+    float yaw_ref       = 0.0f;
+    bool yaw_ref_ready  = false;
+
     int cnt = 200;
     while (1) {
+        float vx = chassis.get_target_vx();
+        float vy = chassis.get_target_vy();
+        float w  = chassis.get_target_w();
+
+        if (imu_yaw_ready) {
+            float yaw = imu_yaw_deg;
+            bool moving_xy = fabsf(vx) > move_eps || fabsf(vy) > move_eps;
+            bool rotating  = fabsf(w) > rotate_eps;
+
+            if (!yaw_ref_ready) {
+                yaw_ref       = yaw;
+                yaw_ref_ready = true;
+            }
+
+            if (button_state == ButtonState::IDLE && moving_xy && !rotating) {
+                float yaw_err = wrap_deg(yaw_ref - yaw);
+                float w_corr  = constrain(yaw_kp * yaw_err, -max_w_corr, max_w_corr);
+                chassis.apply_target(vx, vy, w + w_corr);
+            } else {
+                yaw_ref = yaw;
+                chassis.apply_target(vx, vy, w);
+            }
+        } else {
+            chassis.apply_target(vx, vy, w);
+        }
+
         chassis.update(5ms);
         if (--cnt == 0) {
             cnt = 10;
@@ -410,12 +458,12 @@ void func_heartbeat() {
 
     // led signals
 
-    GPIO_TypeDef* RED_LED_GPIOX   = GPIOI;
-    GPIO_TypeDef* GREEN_LED_GPIOX = GPIOJ;
+    GPIO_TypeDef* RED_LED_GPIOX   = GPIOG;
+    GPIO_TypeDef* GREEN_LED_GPIOX = GPIOC;
     GPIO_TypeDef* BLUE_LED_GPIOX  = GPIOE;
 
-    constexpr int RED_LED_GPIO_PIN   = GPIO_PIN_12;
-    constexpr int GREEN_LED_GPIO_PIN = GPIO_PIN_13;
+    constexpr int RED_LED_GPIO_PIN   = GPIO_PIN_14;
+    constexpr int GREEN_LED_GPIO_PIN = GPIO_PIN_7;
     constexpr int BLUE_LED_GPIO_PIN  = GPIO_PIN_3;
 
     pinMode((int)PINS::RED_LED_PIN, OUTPUT);

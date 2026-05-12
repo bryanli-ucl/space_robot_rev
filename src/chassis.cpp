@@ -39,6 +39,11 @@ void Motor::set_speed(float v) {
 }
 
 void Motor::update(std::chrono::microseconds dt) {
+    if (manual_pwm_enabled) {
+        write_pwm(manual_pwm);
+        return;
+    }
+
     float dt_s    = dt.count() * 0.000001f;
     int32_t delta = count() - prev_enc_cnt;
     prev_enc_cnt  = count();
@@ -82,6 +87,25 @@ void Motor::write_pwm(int pwm) {
     analogWrite(en, pwm);
 }
 
+void Motor::set_manual_pwm(int pwm) {
+    manual_pwm_enabled = true;
+    manual_pwm         = constrain(pwm, -255, 255);
+    write_pwm(manual_pwm);
+}
+
+void Motor::clear_manual_pwm() {
+    manual_pwm_enabled = false;
+    write_pwm(0);
+}
+
+void Motor::stop() {
+    if (manual_pwm_enabled) {
+        write_pwm(manual_pwm);
+    } else {
+        write_pwm(0);
+    }
+}
+
 void Motor::ISR(void* ins_ptr) {
     auto ins = reinterpret_cast<Motor*>(ins_ptr);
     if (gpio_read(&ins->enc_b_hal) == gpio_read(&ins->enc_a_hal)) {
@@ -99,6 +123,14 @@ Chassis::Chassis(Motor& fl, Motor& fr, Motor& rl, Motor& rr) : fl(fl), fr(fr), r
 }
 
 void Chassis::set_target(float vx, float vy, float w) {
+    target_vx = vx;
+    target_vy = vy;
+    target_w  = w;
+
+    apply_target(vx, vy, w);
+}
+
+void Chassis::apply_target(float vx, float vy, float w) {
     vfl = (vx - vy - (L + W) * w) / R;
     vfr = (vx + vy + (L + W) * w) / R;
     vrl = (vx + vy - (L + W) * w) / R;
@@ -128,10 +160,10 @@ void Chassis::set_paras(float l, float w, float r) {
 
 void Chassis::update(std::chrono::microseconds dt) {
     if (!is_enable) {
-        fl.write_pwm(0);
-        fr.write_pwm(0);
-        rl.write_pwm(0);
-        rr.write_pwm(0);
+        fl.stop();
+        fr.stop();
+        rl.stop();
+        rr.stop();
         return;
     }
 
