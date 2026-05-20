@@ -35,7 +35,23 @@ void Motor::reset_count() {
 }
 
 void Motor::set_speed(float v) {
+    if (speed_override_enabled) {
+        return;
+    }
+
     target_speed = v;
+}
+
+void Motor::set_test_speed(float v) {
+    manual_pwm_enabled    = false;
+    speed_override_enabled = true;
+    target_speed          = v;
+    reset_controller();
+}
+
+void Motor::clear_speed_override() {
+    speed_override_enabled = false;
+    reset_controller();
 }
 
 void Motor::update(std::chrono::microseconds dt) {
@@ -45,23 +61,47 @@ void Motor::update(std::chrono::microseconds dt) {
     }
 
     float dt_s    = dt.count() * 0.000001f;
-    int32_t delta = count() - prev_enc_cnt;
-    prev_enc_cnt  = count();
+    int32_t enc_now = count();
+    int32_t delta   = enc_now - prev_enc_cnt;
+    prev_enc_cnt    = enc_now;
+    last_delta       = delta;
+    speed_sample_delta += delta;
+    speed_sample_dt += dt_s;
 
-    float speed = delta / dt_s;
+    if (fabsf(target_speed) < 0.001f) {
+        current_speed = 0.0f;
+        last_error    = 0.0f;
+        derivative    = 0.0f;
+        speed_sample_delta = 0;
+        speed_sample_dt    = 0.0f;
+        reset_controller();
+        write_pwm(0);
+        return;
+    }
 
-    constexpr float r = 0.7f;
-    current_speed     = current_speed * r + speed * (1 - r);
+    constexpr float sample_period_s = 0.02f;
+    if (speed_sample_dt < sample_period_s) {
+        return;
+    }
+
+    float sample_dt = speed_sample_dt;
+    raw_speed = speed_sample_delta / sample_dt;
+    speed_sample_delta = 0;
+    speed_sample_dt    = 0.0f;
+
+    constexpr float r = 0.6f;
+    current_speed     = current_speed * r + raw_speed * (1.0f - r);
 
     float error = target_speed - current_speed;
-    prev_error  = error;
+    last_error  = error;
 
-    integral = error * dt_s;
-    integral = constrain(integral, -1000.f, 1000.f);
+    integral += error * sample_dt;
+    integral = constrain(integral, -300.0f, 300.0f);
 
-    float derivative = (error - prev_error) / dt_s;
+    derivative = (error - prev_error) / sample_dt;
+    prev_error = error;
 
-    output = kp * (error + ki * integral + kd * derivative);
+    output = kp * error + ki * integral + kd * derivative;
     output = constrain(output, -255, 255);
 
     write_pwm(output);
@@ -71,6 +111,8 @@ void Motor::write_pwm(int pwm) {
     if (abs(pwm) < 50) {
         pwm = 0;
     }
+
+    applied_pwm = pwm;
 
     if (pwm == 0) {
         digitalWrite(forward, LOW);
@@ -95,6 +137,7 @@ void Motor::set_manual_pwm(int pwm) {
 
 void Motor::clear_manual_pwm() {
     manual_pwm_enabled = false;
+    clear_speed_override();
     write_pwm(0);
 }
 
@@ -104,6 +147,21 @@ void Motor::stop() {
     } else {
         write_pwm(0);
     }
+}
+
+void Motor::set_pid(float p, float i, float d) {
+    kp = p;
+    ki = i;
+    kd = d;
+    reset_controller();
+}
+
+void Motor::reset_controller() {
+    integral   = 0.0f;
+    prev_error = 0.0f;
+    last_error = 0.0f;
+    derivative = 0.0f;
+    output     = 0.0f;
 }
 
 void Motor::ISR(void* ins_ptr) {

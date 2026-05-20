@@ -30,5 +30,5 @@ void Bash::execute(char* line) {
         }
     }
 
-    wifi_tx("Command '%s' not found.\n", argv[0]);
+    command_tx("Command '%s' not found.\n", argv[0]);
 }

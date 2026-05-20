@@ -5,6 +5,8 @@ import serial.tools.list_ports
 import time
 import subprocess
 import os
+import sys
+import shutil
 
 #
 # Arduino GIGA auto DFU uploader
@@ -41,22 +43,44 @@ def touch_1200bps(port):
 
 def wait_for_dfu():
     print("[AUTO-DFU] Waiting for DFU device...")
+    dfu_util = find_dfu_util()
 
     for _ in range(30):
 
         result = subprocess.run(
-            ["dfu-util", "-l"],
+            [dfu_util, "-l"],
             capture_output=True,
             text=True
         )
 
-        if "Found DFU" in result.stdout:
+        if "Found DFU" in result.stdout or "Found DFU" in result.stderr:
             print("[AUTO-DFU] DFU device found")
             return True
 
         time.sleep(1)
 
     return False
+
+
+def find_dfu_util():
+    exe = "dfu-util.exe" if sys.platform.startswith("win") else "dfu-util"
+    found = shutil.which(exe)
+
+    if found:
+        return found
+
+    candidates = [
+        os.path.join(env.subst("$PROJECT_PACKAGES_DIR"), "tool-dfuutil", "bin", exe),
+        os.path.join(env.subst("$PROJECT_PACKAGES_DIR"), "tool-dfuutil", exe),
+        os.path.join(env.subst("$PROJECT_PACKAGES_DIR"), "tool-dfuutil-arduino", exe),
+    ]
+
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+
+    print(f"[AUTO-DFU] Cannot find {exe}. Install dfu-util or add it to PATH.")
+    env.Exit(1)
 
 
 def upload_bin(source, target, env):
@@ -70,16 +94,19 @@ def upload_bin(source, target, env):
 
     if not port:
         print("[AUTO-DFU] No serial port found")
-        return
+        env.Exit(1)
 
     touch_1200bps(port)
 
     if not wait_for_dfu():
         print("[AUTO-DFU] DFU device not detected")
-        return
+        print("[AUTO-DFU] On Windows, check Device Manager: STM32 BOOTLOADER must use WinUSB/libusbK.")
+        env.Exit(1)
+
+    dfu_util = find_dfu_util()
 
     cmd = [
-        "dfu-util",
+        dfu_util,
         "-a", "0",
         "-D", firmware_path,
         "-s", "0x08040000:leave"
@@ -92,6 +119,7 @@ def upload_bin(source, target, env):
 
     if result.returncode != 0:
         print("[AUTO-DFU] Upload failed")
+        env.Exit(result.returncode)
     else:
         print("[AUTO-DFU] Upload success")
 

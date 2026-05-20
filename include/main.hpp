@@ -53,18 +53,18 @@ enum class PINS : uint8_t {
     MOTOR_RL_EN       = D2,
     MOTOR_RL_FORWARD  = D25,
     MOTOR_RL_BACKWARD = D27,
-    MOTOR_RL_ENC_A    = D32,
-    MOTOR_RL_ENC_B    = D33,
+    MOTOR_RL_ENC_A    = D33,
+    MOTOR_RL_ENC_B    = D32,
 
     MOTOR_FL_EN       = D3,
-    MOTOR_FL_FORWARD  = D29,
-    MOTOR_FL_BACKWARD = D31,
-    MOTOR_FL_ENC_A    = D34,
-    MOTOR_FL_ENC_B    = D35,
+    MOTOR_FL_FORWARD  = D31,
+    MOTOR_FL_BACKWARD = D29,
+    MOTOR_FL_ENC_A    = D35,
+    MOTOR_FL_ENC_B    = D34,
 
     MOTOR_FR_EN       = D4,
-    MOTOR_FR_FORWARD  = D26,
-    MOTOR_FR_BACKWARD = D24,
+    MOTOR_FR_FORWARD  = D24,
+    MOTOR_FR_BACKWARD = D26,
     MOTOR_FR_ENC_A    = D36,
     MOTOR_FR_ENC_B    = D37,
 
@@ -93,8 +93,8 @@ enum class PINS : uint8_t {
     GREED_LED_PIN = D15,
     BLUE_LED_PIN  = LEDB,
 
-    REVIVING_BUTTON_PIN   = D22,
-    KILLSWITCH_BUTTON_PIN = D23,
+    REVIVING_BUTTON_PIN   = A2,
+    KILLSWITCH_BUTTON_PIN = A3,
 
     // Sun Light
     SUN_LIGHT_ADC_PIN = A1,
@@ -133,12 +133,28 @@ constexpr int SERVER_PORT       = 8080;
 
 // IMU Magnetometer Calibration (hard-iron / soft-iron)
 // Run calibration once, read the printed values from serial, then update these constants.
-constexpr float MAG_OFF_X   = 0.0f;
-constexpr float MAG_OFF_Y   = 0.0f;
-constexpr float MAG_OFF_Z   = 0.0f;
-constexpr float MAG_SCALE_X = 1.0f;
-constexpr float MAG_SCALE_Y = 1.0f;
-constexpr float MAG_SCALE_Z = 1.0f;
+constexpr float IMU_SAMPLE_HZ           = 100.0f;
+constexpr uint8_t IMU_GYRO_SMPLRT_DIV   = 10; // 1.1kHz / (1 + 10) = 100Hz
+constexpr uint16_t IMU_ACC_SMPLRT_DIV   = 10; // 1.125kHz / (1 + 10) ~= 102.27Hz
+constexpr uint32_t IMU_GYRO_BIAS_CAL_MS = 2000;
+constexpr bool IMU_MAG_CALIBRATE        = false;
+constexpr uint32_t IMU_MAG_CAL_MS       = 10000;
+constexpr float LINE_KP                 = 0.0100f;
+constexpr float LINE_KD                 = 0.0040f;
+constexpr float LINE_BASE_VX            = 12.0f;
+constexpr float LINE_MIN_VX             = 5.0f;
+constexpr float LINE_MAX_W              = 3.0f;
+constexpr float WALL_KP                 = 0.12f;
+constexpr float WALL_KD                 = 0.08f;
+constexpr float WALL_BASE_VX            = 9.0f;
+constexpr float WALL_MAX_W              = 2.5f;
+constexpr int16_t WALL_FRONT_STOP_CM    = 12;
+constexpr float MAG_OFF_X               = 457.575012f;
+constexpr float MAG_OFF_Y               = 457.575012f;
+constexpr float MAG_OFF_Z               = -33.150002f;
+constexpr float MAG_SCALE_X             = 1.576635f;
+constexpr float MAG_SCALE_Y             = 0.789238f;
+constexpr float MAG_SCALE_Z             = 1.021528f;
 
 }; // namespace CONFIG
 
@@ -170,6 +186,10 @@ extern volatile int8_t mz;
 extern volatile int16_t dist_front;
 extern volatile int16_t dist_left;
 extern volatile int16_t dist_right;
+
+// Wall Follow
+extern volatile int8_t wall_follow_side;
+extern volatile float wall_follow_target_cm;
 
 // IR
 extern uint16_t ir_vals[9];
@@ -233,3 +253,4 @@ extern WiFiUDP udp;
 // Function Prototype
 void serial_tx(const char* fmt, ...);
 void wifi_tx(const char* fmt, ...);
+void command_tx(const char* fmt, ...);

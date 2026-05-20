@@ -12,17 +12,36 @@ class Motor {
     int32_t count() const;
     void reset_count();
     void set_speed(float v);
+    void set_test_speed(float v);
+    void clear_speed_override();
     void update(std::chrono::microseconds dt);
     void write_pwm(int pwm);
     void set_manual_pwm(int pwm);
     void clear_manual_pwm();
     void stop();
+    void set_pid(float p, float i, float d);
+    void reset_controller();
+
+    float get_target_speed() const { return target_speed; }
+    float get_current_speed() const { return current_speed; }
+    float get_kp() const { return kp; }
+    float get_ki() const { return ki; }
+    float get_kd() const { return kd; }
+    float get_output() const { return output; }
+    int32_t get_last_delta() const { return last_delta; }
+    float get_raw_speed() const { return raw_speed; }
+    float get_last_error() const { return last_error; }
+    float get_integral() const { return integral; }
+    float get_derivative() const { return derivative; }
+    int get_applied_pwm() const { return applied_pwm; }
+    bool is_manual_pwm() const { return manual_pwm_enabled; }
+    bool is_speed_override() const { return speed_override_enabled; }
 
     private:
     static void ISR(void* ins_ptr);
 
     int32_t prev_enc_cnt;
-    int32_t enc_cnt;
+    volatile int32_t enc_cnt;
     pin_size_t en;
     pin_size_t forward;
     pin_size_t backward;
@@ -35,17 +54,25 @@ class Motor {
     float target_speed  = 0.0f;
     float current_speed = 0.0f;
 
-    float kp = 0.5f;
-    float ki = 0.1f;
-    float kd = 0.0f;
+    float kp = 0.25f;
+    float ki = 1.8f;
+    float kd = 0.1f;
 
     float integral   = 0.0f;
     float prev_error = 0.0f;
+    float last_error = 0.0f;
+    float derivative = 0.0f;
 
     float output = 0.0f;
+    int32_t last_delta = 0;
+    float raw_speed    = 0.0f;
+    int applied_pwm    = 0;
+    int32_t speed_sample_delta = 0;
+    float speed_sample_dt      = 0.0f;
 
     bool manual_pwm_enabled = false;
     int manual_pwm          = 0;
+    bool speed_override_enabled = false;
 };
 
 class Chassis {

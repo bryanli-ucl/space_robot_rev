@@ -3,6 +3,8 @@
 Thread task_heartbeat(osPriorityBelowNormal7);
 Thread task_serial_debug(osPriorityBelowNormal4);
 Thread task_sensors(osPriorityBelowNormal3);
+Thread task_imu(osPriorityAboveNormal5);
+Thread task_rfid(osPriorityAboveNormal1);
 Thread task_mission(osPriorityAboveNormal2);
 Thread task_wifi_server(osPriorityAboveNormal3);
 Thread task_chassis(osPriorityAboveNormal4);
@@ -36,6 +38,8 @@ void func_wifi_server();
 void func_chassis();
 void func_mission();
 void func_sensors();
+void func_imu();
+void func_rfid();
 
 // State Machine Define
 ButtonState button_state = ButtonState::STOPPED;
@@ -48,6 +52,8 @@ void setup() {
     task_chassis.start(func_chassis);
     task_mission.start(func_mission);
     task_sensors.start(func_sensors);
+    task_imu.start(func_imu);
+    task_rfid.start(func_rfid);
 }
 
 void loop() {
@@ -76,6 +82,10 @@ volatile int16_t dist_front = 0;
 volatile int16_t dist_left  = 0;
 volatile int16_t dist_right = 0;
 
+// Wall Follow
+volatile int8_t wall_follow_side       = 1;
+volatile float wall_follow_target_cm   = 20.0f;
+
 // IR
 uint16_t ir_vals[9];
 volatile uint16_t ir_pos;
@@ -95,6 +105,25 @@ LEDStatus led_blue  = LEDStatus::BLINK;
 
 // Sun Light
 uint16_t sun_light;
+
+static void scan_i2c_bus(TwoWire& bus, const char* name) {
+    serial_tx("I2C scan %s begin\n", name);
+
+    bool found = false;
+    for (uint8_t addr = 1; addr < 127; addr++) {
+        bus.beginTransmission(addr);
+        uint8_t err = bus.endTransmission();
+
+        if (err == 0) {
+            found = true;
+            serial_tx("I2C %s found 0x%02X\n", name, addr);
+        }
+    }
+
+    if (!found) {
+        serial_tx("I2C %s found none\n", name);
+    }
+}
 
 void func_sensors() {
 
@@ -129,83 +158,8 @@ void func_sensors() {
     serial_tx("Ultrasonic Init\n");
     constexpr float us_temperature = 25.f;
 
-    // RFID
-    serial_tx("RFID Init\n");
-    Wire.begin();
-
-    // rfid.PCD_Init();
-    // if (!rfid.PCD_PerformSelfTest()) {
-    //     serial_tx("RFID Cannot Pass Self Test\n");
-    // }
-
     // Sun Light
     pinMode((int)PINS::SUN_LIGHT_ADC_PIN, INPUT);
-
-    // IMU
-    serial_tx("IMU Init\n");
-    if (imu.begin(Wire, 1) != ICM_20948_Stat_Ok) {
-        serial_tx("IMU init fail\n");
-    }
-
-    ahrs.begin(100.0f);
-
-    // Load pre-calibrated magnetometer params (update these in main.hpp after running calibration)
-    float mag_scale_x = CONFIG::MAG_SCALE_X;
-    float mag_scale_y = CONFIG::MAG_SCALE_Y;
-    float mag_scale_z = CONFIG::MAG_SCALE_Z;
-
-    float mag_off_x = CONFIG::MAG_OFF_X;
-    float mag_off_y = CONFIG::MAG_OFF_Y;
-    float mag_off_z = CONFIG::MAG_OFF_Z;
-
-    char imu_calibrate = 1;
-    if (imu_calibrate) {
-        float min_x = INT_MAX, max_x = INT_MIN;
-        float min_y = INT_MAX, max_y = INT_MIN;
-        float min_z = INT_MAX, max_z = INT_MIN;
-
-        serial_tx("imu_calibrate Begin\n");
-
-        unsigned long start = millis();
-        while (millis() - start < 10000) {
-            if (imu.dataReady()) {
-                imu.getAGMT();
-
-                float mx = imu.magX();
-                float my = imu.magY();
-                float mz = imu.magZ();
-
-                if (mx < min_x) min_x = mx;
-                if (mx > max_x) max_x = mx;
-                if (my < min_y) min_y = my;
-                if (my > max_y) max_y = my;
-                if (mz < min_z) min_z = mz;
-                if (mz > max_z) max_z = mz;
-            }
-            ThisThread::sleep_for(20ms);
-        }
-
-        mag_off_x = (min_x + max_x) / 2.0f;
-        mag_off_y = (min_y + max_y) / 2.0f;
-        mag_off_z = (min_z + max_z) / 2.0f;
-
-        float radius_x = (max_x - min_x) / 2.0f;
-        float radius_y = (max_y - min_y) / 2.0f;
-        float radius_z = (max_z - min_z) / 2.0f;
-        float avg_r    = (radius_x + radius_y + radius_z) / 3.0f;
-
-        if (avg_r > 0.1f) {
-            mag_scale_x = avg_r / radius_x;
-            mag_scale_y = avg_r / radius_y;
-            mag_scale_z = avg_r / radius_z;
-        }
-
-        serial_tx("imu_calibrate Done\n");
-        serial_tx("Offset (uT): %f %f %f\n", mag_off_x, mag_off_y, mag_off_z);
-        serial_tx("Scale  (uT): %f %f %f\n", mag_scale_x, mag_scale_y, mag_scale_z);
-    }
-
-    // Sun Light
 
     // Mouse
     serial_tx("Mouse Init\n");
@@ -214,30 +168,7 @@ void func_sensors() {
     mouse.attachYEvent([](int8_t v) { my -= v; });
     mouse.attachZEvent([](int8_t v) { mz += v; });
 
-
     while (1) {
-
-        // IMU
-        if (imu.dataReady()) {
-            imu.getAGMT();
-
-            float ax = imu.accX();
-            float ay = imu.accY();
-            float az = imu.accZ();
-
-            float gx = imu.gyrX();
-            float gy = imu.gyrY();
-            float gz = imu.gyrZ();
-
-            float mx = (imu.magX() - mag_off_x) * mag_scale_x;
-            float my = (imu.magY() - mag_off_y) * mag_scale_y;
-            float mz = (imu.magZ() - mag_off_z) * mag_scale_z;
-
-            ahrs.update(gx, gy, gz, ax, ay, az, mx, my, mz);
-            imu_yaw_deg   = ahrs.getYaw();
-            imu_yaw_ready = true;
-        }
-
         // IR Array
         ir_pos = qtr.readLineBlack(ir_vals);
 
@@ -248,20 +179,10 @@ void func_sensors() {
         if (slow_cnt-- == 0) {
             slow_cnt = 10;
 
-
             // Ultrasonic
             dist_front = usf.measureDistanceCm(us_temperature);
             dist_left  = usl.measureDistanceCm(us_temperature);
             dist_right = usr.measureDistanceCm(us_temperature);
-
-            // RFID
-            // if (rfid.PICC_IsNewCardPresent()) {
-            //     if (rfid.PICC_ReadCardSerial()) {
-            //         detected_uid = reinterpret_cast<uint32_t*>(rfid.uid.uidByte)[0];
-            //         serial_tx("New Tag Detected, size: %d, uid: %d\n", rfid.uid.size, detected_uid);
-            //         wifi_tx("New Tag Detected, size: %d, uid: %d\n", rfid.uid.size, detected_uid);
-            //     }
-            // }
 
             // Mouse
             if (!mouse.connected()) {
@@ -270,9 +191,7 @@ void func_sensors() {
                 }
             }
 
-            if (mbutton & MOUSE::LEFT) {
-                mx = 0, my = 0, mz = 0;
-            }
+            if (mbutton & MOUSE::LEFT) { mx = 0, my = 0, mz = 0; }
             if (mbutton & MOUSE::RIGHT) {}
             if (mbutton & MOUSE::MID) {}
         }
@@ -281,14 +200,204 @@ void func_sensors() {
     }
 }
 
-static float wrap_deg(float angle) {
-    while (angle > 180.0f) {
-        angle -= 360.0f;
+void func_imu() {
+    ThisThread::sleep_for(200ms);
+
+    serial_tx("IMU I2C Init\n");
+    Wire1.begin();
+    scan_i2c_bus(Wire1, "Wire1");
+
+    serial_tx("IMU Init\n");
+    bool imu_ok = false;
+    if (imu.begin(Wire1, 0) != ICM_20948_Stat_Ok) {
+        serial_tx("IMU init fail\n");
+    } else {
+        imu_ok = true;
+        serial_tx("IMU init ok\n");
+
+        ICM_20948_Status_e imu_stat = imu.setSampleMode(
+        ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr,
+        ICM_20948_Sample_Mode_Continuous);
+        if (imu_stat != ICM_20948_Stat_Ok) {
+            serial_tx("IMU setSampleMode fail: %s\n", imu.statusString(imu_stat));
+        }
+
+        ICM_20948_smplrt_t imu_sample_rate;
+        imu_sample_rate.g = CONFIG::IMU_GYRO_SMPLRT_DIV;
+        imu_sample_rate.a = CONFIG::IMU_ACC_SMPLRT_DIV;
+        imu_stat          = imu.setSampleRate(ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr, imu_sample_rate);
+        if (imu_stat != ICM_20948_Stat_Ok) {
+            serial_tx("IMU setSampleRate fail: %s\n", imu.statusString(imu_stat));
+        } else {
+            serial_tx("IMU acc/gyr sample rate set to %.1fHz\n", CONFIG::IMU_SAMPLE_HZ);
+        }
+
+        ICM_20948_dlpcfg_t imu_dlpf;
+        imu_dlpf.a = acc_d50bw4_n68bw8;
+        imu_dlpf.g = gyr_d51bw2_n73bw3;
+        imu_stat   = imu.setDLPFcfg(ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr, imu_dlpf);
+        if (imu_stat != ICM_20948_Stat_Ok) {
+            serial_tx("IMU setDLPFcfg fail: %s\n", imu.statusString(imu_stat));
+        }
+
+        imu_stat = imu.enableDLPF(ICM_20948_Internal_Acc | ICM_20948_Internal_Gyr, true);
+        if (imu_stat != ICM_20948_Stat_Ok) {
+            serial_tx("IMU enableDLPF fail: %s\n", imu.statusString(imu_stat));
+        }
     }
-    while (angle < -180.0f) {
-        angle += 360.0f;
+
+    ahrs.begin(CONFIG::IMU_SAMPLE_HZ);
+
+    float mag_scale_x = CONFIG::MAG_SCALE_X;
+    float mag_scale_y = CONFIG::MAG_SCALE_Y;
+    float mag_scale_z = CONFIG::MAG_SCALE_Z;
+
+    float mag_off_x = CONFIG::MAG_OFF_X;
+    float mag_off_y = CONFIG::MAG_OFF_Y;
+    float mag_off_z = CONFIG::MAG_OFF_Z;
+
+    float gyro_bias_x = 0.0f;
+    float gyro_bias_y = 0.0f;
+    float gyro_bias_z = 0.0f;
+
+    if (imu_ok) {
+        serial_tx("IMU gyro bias calibration begin, keep robot still\n");
+
+        uint32_t gyro_bias_count = 0;
+        unsigned long start      = millis();
+        while (millis() - start < CONFIG::IMU_GYRO_BIAS_CAL_MS) {
+            if (imu.dataReady()) {
+                imu.getAGMT();
+                gyro_bias_x += imu.gyrX();
+                gyro_bias_y += imu.gyrY();
+                gyro_bias_z += imu.gyrZ();
+                gyro_bias_count++;
+            }
+            ThisThread::sleep_for(5ms);
+        }
+
+        if (gyro_bias_count > 0) {
+            gyro_bias_x /= gyro_bias_count;
+            gyro_bias_y /= gyro_bias_count;
+            gyro_bias_z /= gyro_bias_count;
+        }
+
+        serial_tx("IMU gyro bias: %.4f %.4f %.4f dps, samples: %lu\n",
+        gyro_bias_x, gyro_bias_y, gyro_bias_z, gyro_bias_count);
+
+        if (CONFIG::IMU_MAG_CALIBRATE) {
+            float min_x = INT_MAX, max_x = INT_MIN;
+            float min_y = INT_MAX, max_y = INT_MIN;
+            float min_z = INT_MAX, max_z = INT_MIN;
+
+            serial_tx("imu_calibrate Begin\n");
+
+            unsigned long start = millis();
+            while (millis() - start < CONFIG::IMU_MAG_CAL_MS) {
+                if (imu.dataReady()) {
+                    imu.getAGMT();
+
+                    float mx = imu.magX();
+                    float my = imu.magY();
+                    float mz = imu.magZ();
+
+                    if (mx < min_x) min_x = mx;
+                    if (mx > max_x) max_x = mx;
+                    if (my < min_y) min_y = my;
+                    if (my > max_y) max_y = my;
+                    if (mz < min_z) min_z = mz;
+                    if (mz > max_z) max_z = mz;
+                }
+                ThisThread::sleep_for(20ms);
+            }
+
+            mag_off_x = (min_x + max_x) / 2.0f;
+            mag_off_y = (min_y + max_y) / 2.0f;
+            mag_off_z = (min_z + max_z) / 2.0f;
+
+            float radius_x = (max_x - min_x) / 2.0f;
+            float radius_y = (max_y - min_y) / 2.0f;
+            float radius_z = (max_z - min_z) / 2.0f;
+            float avg_r    = (radius_x + radius_y + radius_z) / 3.0f;
+
+            if (avg_r > 0.1f && radius_x > 0.1f && radius_y > 0.1f && radius_z > 0.1f) {
+                mag_scale_x = avg_r / radius_x;
+                mag_scale_y = avg_r / radius_y;
+                mag_scale_z = avg_r / radius_z;
+            }
+
+            serial_tx("imu_calibrate Done\n");
+            serial_tx("Offset (uT): %f %f %f\n", mag_off_x, mag_off_y, mag_off_z);
+            serial_tx("Scale  (uT): %f %f %f\n", mag_scale_x, mag_scale_y, mag_scale_z);
+        }
+    } else {
+        serial_tx("imu_calibrate skipped because IMU init failed\n");
     }
-    return angle;
+
+    while (1) {
+        if (imu_ok && imu.dataReady()) {
+            imu.getAGMT();
+
+            float ax = imu.accX();
+            float ay = imu.accY();
+            float az = imu.accZ();
+
+            float gx = imu.gyrX() - gyro_bias_x;
+            float gy = imu.gyrY() - gyro_bias_y;
+            float gz = imu.gyrZ() - gyro_bias_z;
+
+            float mx = (imu.magX() - mag_off_x) * mag_scale_x;
+            float my = (imu.magY() - mag_off_y) * mag_scale_y;
+            float mz = (imu.magZ() - mag_off_z) * mag_scale_z;
+
+            ahrs.update(gx, gy, gz, ax, ay, az, mx, my, mz);
+            imu_yaw_deg   = ahrs.getYaw();
+            imu_yaw_ready = true;
+        }
+
+        ThisThread::sleep_for(1ms);
+    }
+}
+
+void func_rfid() {
+    ThisThread::sleep_for(200ms);
+
+    serial_tx("RFID I2C Init\n");
+    Wire.begin();
+    scan_i2c_bus(Wire, "Wire");
+
+    serial_tx("RFID Init\n");
+    rfid.PCD_Init();
+    byte rfid_version = rfid.PCD_ReadRegister(rfid.VersionReg);
+    serial_tx("RFID VersionReg: 0x%02X\n", rfid_version);
+    if (!rfid.PCD_PerformSelfTest()) {
+        serial_tx("RFID self test warning\n");
+    } else {
+        serial_tx("RFID self test ok\n");
+    }
+    rfid.PCD_Init();
+
+    uint32_t last_uid     = 0;
+    unsigned long last_ms = 0;
+    constexpr uint32_t repeat_cooldown_ms = 1000;
+
+    while (1) {
+        if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+            uint32_t uid = reinterpret_cast<uint32_t*>(rfid.uid.uidByte)[0];
+            unsigned long now = millis();
+
+            if (uid != last_uid || now - last_ms > repeat_cooldown_ms) {
+                detected_uid = uid;
+                last_uid     = uid;
+                last_ms      = now;
+
+                serial_tx("New Tag Detected, size: %d, uid: %lu\n", rfid.uid.size, static_cast<unsigned long>(uid));
+                wifi_tx("New Tag Detected, size: %d, uid: %lu\n", rfid.uid.size, static_cast<unsigned long>(uid));
+            }
+        }
+
+        ThisThread::sleep_for(50ms);
+    }
 }
 
 void func_chassis() {
@@ -300,17 +409,26 @@ void func_chassis() {
     constexpr float move_eps   = 0.01f;
     constexpr float rotate_eps = 0.01f;
 
-    float yaw_ref       = 0.0f;
-    bool yaw_ref_ready  = false;
+    float yaw_ref      = 0.0f;
+    bool yaw_ref_ready = false;
 
-    int cnt = 200;
+    auto wrap_deg = [](float angle) -> float {
+        while (angle > 180.0f) {
+            angle -= 360.0f;
+        }
+        while (angle < -180.0f) {
+            angle += 360.0f;
+        }
+        return angle;
+    };
+
     while (1) {
         float vx = chassis.get_target_vx();
         float vy = chassis.get_target_vy();
         float w  = chassis.get_target_w();
 
         if (imu_yaw_ready) {
-            float yaw = imu_yaw_deg;
+            float yaw      = imu_yaw_deg;
             bool moving_xy = fabsf(vx) > move_eps || fabsf(vy) > move_eps;
             bool rotating  = fabsf(w) > rotate_eps;
 
@@ -331,12 +449,8 @@ void func_chassis() {
             chassis.apply_target(vx, vy, w);
         }
 
-        chassis.update(5ms);
-        if (--cnt == 0) {
-            cnt = 10;
-            // serial_tx("chassis: %f %f %f %f, mouse: %d %d\n", chassis.get_vfl(), chassis.get_vfr(), chassis.get_vrl(), chassis.get_vrr(), mx, my);
-        }
-        ThisThread::sleep_for(5ms);
+        chassis.update(20ms);
+        ThisThread::sleep_for(20ms);
     }
 }
 
@@ -372,6 +486,18 @@ void wifi_tx(const char* fmt, ...) {
     va_end(args);
 
     mail_wifi_tx.put(mail);
+}
+
+void command_tx(const char* fmt, ...) {
+    char buf[256];
+
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    serial_tx("%s", buf);
+    wifi_tx("%s", buf);
 }
 
 Mail<std::array<char, 256>, 64> mail_udp_cmd;
@@ -443,6 +569,9 @@ void func_serial_debug() {
     Serial1.begin(115200);
     ThisThread::sleep_for(100ms);
 
+    std::array<char, 256> serial_cmd;
+    size_t serial_cmd_len = 0;
+
     while (1) {
         while (!mail_serial_debug.empty()) {
             std::array<char, 256>* msg = mail_serial_debug.try_get();
@@ -450,7 +579,32 @@ void func_serial_debug() {
             Serial1.write(msg->data());
             mail_serial_debug.free(msg);
         }
-        ThisThread::sleep_for(100ms);
+
+        while (Serial1.available() > 0) {
+            char c = static_cast<char>(Serial1.read());
+
+            if (c == '\r' || c == '\n') {
+                if (serial_cmd_len == 0) {
+                    continue;
+                }
+
+                serial_cmd[serial_cmd_len] = '\0';
+                serial_tx("SERIAL RX: %s\n", serial_cmd.data());
+                bash.execute(serial_cmd.data());
+                serial_cmd_len = 0;
+            } else if (c == '\b' || c == 0x7f) {
+                if (serial_cmd_len > 0) {
+                    serial_cmd_len--;
+                }
+            } else if (serial_cmd_len < serial_cmd.size() - 1) {
+                serial_cmd[serial_cmd_len++] = c;
+            } else {
+                serial_cmd_len = 0;
+                serial_tx("SERIAL RX overflow, command cleared.\n");
+            }
+        }
+
+        ThisThread::sleep_for(10ms);
     }
 }
 
