@@ -1,12 +1,13 @@
 #include "main.hpp"
 
+#include <ctype.h>
+
 Thread task_heartbeat(osPriorityBelowNormal7);
 Thread task_serial_debug(osPriorityBelowNormal4);
 Thread task_sensors(osPriorityBelowNormal3);
 Thread task_imu(osPriorityAboveNormal5);
 Thread task_rfid(osPriorityAboveNormal1);
 Thread task_mission(osPriorityAboveNormal2);
-Thread task_wifi_server(osPriorityAboveNormal3);
 Thread task_chassis(osPriorityAboveNormal4);
 
 // Devices
@@ -28,13 +29,13 @@ MFRC522_I2C rfid(static_cast<byte>(I2C_ADDR::RFID), static_cast<byte>(-1), &Wire
 
 ICM_20948_I2C imu;
 
-WiFiUDP udp;
+MiniMessenger messenger;
 
 // Function Prototypes
 
 void func_heartbeat();
 void func_serial_debug();
-void func_wifi_server();
+void func_mqtt_messenger_tick();
 void func_chassis();
 void func_mission();
 void func_sensors();
@@ -48,7 +49,6 @@ MotionState motion_state = MotionState::IDLE;
 void setup() {
     task_heartbeat.start(func_heartbeat);
     task_serial_debug.start(func_serial_debug);
-    task_wifi_server.start(func_wifi_server);
     task_chassis.start(func_chassis);
     task_mission.start(func_mission);
     task_sensors.start(func_sensors);
@@ -57,7 +57,8 @@ void setup() {
 }
 
 void loop() {
-    ThisThread::sleep_for(10s);
+    func_mqtt_messenger_tick();
+    ThisThread::sleep_for(10ms);
 }
 
 // Field
@@ -83,8 +84,8 @@ volatile int16_t dist_left  = 0;
 volatile int16_t dist_right = 0;
 
 // Wall Follow
-volatile int8_t wall_follow_side       = 1;
-volatile float wall_follow_target_cm   = 20.0f;
+volatile int8_t wall_follow_side     = 1;
+volatile float wall_follow_target_cm = 20.0f;
 
 // IR
 uint16_t ir_vals[9];
@@ -377,13 +378,13 @@ void func_rfid() {
     }
     rfid.PCD_Init();
 
-    uint32_t last_uid     = 0;
-    unsigned long last_ms = 0;
+    uint32_t last_uid                     = 0;
+    unsigned long last_ms                 = 0;
     constexpr uint32_t repeat_cooldown_ms = 1000;
 
     while (1) {
         if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
-            uint32_t uid = reinterpret_cast<uint32_t*>(rfid.uid.uidByte)[0];
+            uint32_t uid      = reinterpret_cast<uint32_t*>(rfid.uid.uidByte)[0];
             unsigned long now = millis();
 
             if (uid != last_uid || now - last_ms > repeat_cooldown_ms) {
@@ -500,68 +501,195 @@ void command_tx(const char* fmt, ...) {
     wifi_tx("%s", buf);
 }
 
-Mail<std::array<char, 256>, 64> mail_udp_cmd;
-void func_wifi_server() {
-    if (CONFIG::SSID == nullptr) {
-        serial_tx("Please set CONFIG::SSID in main.hpp\n");
+Mail<std::array<char, 256>, 64> mail_mqtt_cmd;
+
+static volatile bool mqtt_safety_enabled = false;
+
+static void stop_robot_for_mqtt_safety() {
+    mqtt_safety_enabled = false;
+    button_state        = ButtonState::STOPPED;
+    motion_state        = MotionState::IDLE;
+    chassis.set_target(0.0f, 0.0f, 0.0f);
+}
+
+static bool payload_starts_with_type(const char* msg) {
+    while (*msg != '\0' && isspace(static_cast<unsigned char>(*msg))) {
+        msg++;
+    }
+    return strncmp(msg, "type=", 5) == 0;
+}
+
+static const char* wifi_status_name(uint8_t status) {
+    switch (status) {
+    case WL_IDLE_STATUS:
+        return "idle";
+    case WL_NO_SSID_AVAIL:
+        return "ssid unavailable";
+    case WL_SCAN_COMPLETED:
+        return "scan completed";
+    case WL_CONNECTED:
+        return "connected";
+    case WL_CONNECT_FAILED:
+        return "connect failed";
+    case WL_CONNECTION_LOST:
+        return "connection lost";
+    case WL_DISCONNECTED:
+        return "disconnected";
+    default:
+        return "unknown";
+    }
+}
+
+static void on_mqtt_message(const MessageMetadata& metadata, const uint8_t* payload, size_t length) {
+    char msg[256];
+    size_t copy_len = (length < sizeof(msg) - 1) ? length : sizeof(msg) - 1;
+    memcpy(msg, payload, copy_len);
+    msg[copy_len] = '\0';
+
+    serial_tx("MQTT RX [%s -> %s]: %s\n", metadata.fromBoardId, metadata.target, msg);
+
+    if (strstr(msg, "type=heartbeat enable=1")) {
+        if (!mqtt_safety_enabled) {
+            serial_tx("MQTT safety: heartbeat enabled\n");
+        }
+        mqtt_safety_enabled = true;
+        if (button_state == ButtonState::STOPPED) {
+            button_state = ButtonState::IDLE;
+        }
         return;
     }
 
-    // Connect WiFi
-    if (WiFi.status() == WL_CONNECTED) {
-        serial_tx("WiFi already connected, IP: %s\n", WiFi.localIP().toString().c_str());
-    } else {
-        WiFi.begin(CONFIG::SSID, CONFIG::PWD);
-        int attempts = 0;
-        while (WiFi.status() != WL_CONNECTED && attempts < 100) {
-            ThisThread::sleep_for(100ms);
-            attempts++;
-        }
-        if (WiFi.status() != WL_CONNECTED) {
-            serial_tx("WiFi connection failed\n");
-            return;
-        }
-        serial_tx("WiFi connected, IP: %s\n", WiFi.localIP().toString().c_str());
+    if (strstr(msg, "type=heartbeat enable=0")) {
+        stop_robot_for_mqtt_safety();
+        serial_tx("MQTT safety: heartbeat disabled\n");
+        return;
     }
 
-    // Start UDP
-    udp.begin(CONFIG::SERVER_PORT);
-    serial_tx("UDP started on port %d, target PC: %s:%d\n",
-    CONFIG::SERVER_PORT, CONFIG::SERVER_IP, CONFIG::SERVER_PORT);
+    if (strstr(msg, "type=emergency enabled=true") || strstr(msg, "type=disable enabled=false")) {
+        stop_robot_for_mqtt_safety();
+        serial_tx("MQTT safety: emergency/disable active\n");
+        return;
+    }
 
-    wifi_tx("UDP started on port %d, target PC: %s:%d\n",
-    CONFIG::SERVER_PORT, CONFIG::SERVER_IP, CONFIG::SERVER_PORT);
+    if (payload_starts_with_type(msg)) {
+        return;
+    }
 
-    while (1) {
-        // Send queued wifi_tx messages
-        while (!mail_wifi_tx.empty()) {
-            std::array<char, 256>* msg = mail_wifi_tx.try_get();
-            if (msg == nullptr) break;
-            udp.beginPacket(CONFIG::SERVER_IP, CONFIG::SERVER_PORT);
-            udp.write((const uint8_t*)msg->data(), strlen(msg->data()));
-            udp.endPacket();
-            mail_wifi_tx.free(msg);
+    std::array<char, 256>* mail = mail_mqtt_cmd.try_alloc();
+    if (mail == nullptr) {
+        serial_tx("MQTT RX queue full, command dropped\n");
+        return;
+    }
+
+    strncpy(mail->data(), msg, mail->size() - 1);
+    mail->data()[mail->size() - 1] = '\0';
+    mail_mqtt_cmd.put(mail);
+}
+
+void func_mqtt_messenger_tick() {
+    static bool initialized               = false;
+    static bool missing_config_logged     = false;
+    static unsigned long last_register_ms = 0;
+    static unsigned long last_status_ms   = 0;
+    static bool last_connected            = false;
+
+    if (CONFIG::SSID == nullptr) {
+        if (!missing_config_logged) {
+            missing_config_logged = true;
+            serial_tx("Please set CONFIG::SSID in main.hpp\n");
         }
+        return;
+    }
 
-        // Receive data from PC
-        int packet_size = udp.parsePacket();
-        if (packet_size) {
-            std::array<char, 256>* mail = mail_udp_cmd.try_alloc();
+    if (!initialized) {
+        if (WiFi.status() == WL_CONNECTED) {
+            serial_tx("WiFi already connected, IP: %s\n", WiFi.localIP().toString().c_str());
+        } else {
+            ThisThread::sleep_for(100ms);
+            serial_tx("WiFi connecting to %s\n", CONFIG::SSID);
+            WiFi.begin(CONFIG::SSID, CONFIG::PWD);
 
-            if (mail == nullptr) {
-                udp.readString();
-                continue;
+            int attempts = 0;
+            while (WiFi.status() != WL_CONNECTED && attempts < 1000) {
+                ThisThread::sleep_for(100ms);
+                attempts++;
+                if (attempts % 10 == 0) {
+                    serial_tx("WiFi connect attempts: %d\n", attempts);
+                }
             }
 
-            int len = udp.read(mail->data(), mail->max_size() - 1);
-            if (len >= 0) {
-                mail->data()[len] = '\0';
+            if (WiFi.status() == WL_CONNECTED) {
+                serial_tx("WiFi connected, IP: %s\n", WiFi.localIP().toString().c_str());
+            } else {
+                serial_tx("WiFi initial connect failed, status: %s\n", wifi_status_name(WiFi.status()));
             }
-            serial_tx("UDP RX [%s:%d]: %s\n", udp.remoteIP().toString().c_str(), udp.remotePort(), mail->data());
-            mail_udp_cmd.put(mail);
         }
 
-        ThisThread::sleep_for(100ms);
+        messenger.onMessage(on_mqtt_message);
+        bool connected = messenger.begin(CONFIG::SSID,
+        CONFIG::PWD,
+        CONFIG::MQTT_BROKER_HOST,
+        CONFIG::MQTT_BROKER_PORT,
+        CONFIG::GROUP_ID,
+        CONFIG::BOARD_ID);
+
+        initialized    = true;
+        last_connected = connected;
+
+        serial_tx("MiniMessenger started on Arduino loop, broker: %s:%u, group: %s, board: %s, client: %s, connected: %d, error: %d\n",
+        CONFIG::MQTT_BROKER_HOST,
+        CONFIG::MQTT_BROKER_PORT,
+        CONFIG::GROUP_ID,
+        CONFIG::BOARD_ID,
+        messenger.clientId(),
+        connected,
+        messenger.connectError());
+    }
+
+    messenger.loop();
+
+    bool now_connected = messenger.isConnected();
+    if (now_connected != last_connected) {
+        last_connected = now_connected;
+        serial_tx("MiniMessenger %s, IP: %s\n",
+        now_connected ? "connected" : "disconnected",
+        WiFi.localIP().toString().c_str());
+    }
+
+    if (millis() - last_status_ms > 5000 || last_status_ms == 0) {
+        last_status_ms = millis();
+        serial_tx("MiniMessenger status: wifi=%s mqtt=%d error=%d ip=%s broker=%s:%u client=%s\n",
+        wifi_status_name(WiFi.status()),
+        now_connected,
+        messenger.connectError(),
+        WiFi.localIP().toString().c_str(),
+        CONFIG::MQTT_BROKER_HOST,
+        CONFIG::MQTT_BROKER_PORT,
+        messenger.clientId());
+    }
+
+    if (now_connected && (last_register_ms == 0 || millis() - last_register_ms > 10000)) {
+        last_register_ms = millis();
+
+        char reg[96];
+        snprintf(reg,
+        sizeof(reg),
+        "type=register team_id=%s board_id=%s",
+        CONFIG::GROUP_ID,
+        CONFIG::BOARD_ID);
+        bool sent = messenger.sendToBoard(CONFIG::SERVER_BOARD_ID, reg);
+        serial_tx("MiniMessenger register %s: %s\n", sent ? "sent" : "failed", reg);
+    }
+
+    // Send queued wifi_tx messages to the challenge server.
+    while (!mail_wifi_tx.empty()) {
+        std::array<char, 256>* msg = mail_wifi_tx.try_get();
+        if (msg == nullptr) break;
+        bool sent = messenger.sendToBoard(CONFIG::SERVER_BOARD_ID, msg->data());
+        if (!sent) {
+            serial_tx("MiniMessenger TX failed: %s\n", msg->data());
+        }
+        mail_wifi_tx.free(msg);
     }
 }
 

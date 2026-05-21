@@ -3,8 +3,8 @@
 // Includes
 
 #include <Arduino.h>
+#include <MiniMessenger.h>
 #include <WiFi.h>
-#include <WiFiUdp.h>
 #include <Wire.h>
 #include <mbed.h>
 
@@ -128,8 +128,15 @@ constexpr const char* SSID = "PhaseSpaceNetwork_2.4G";
 // constexpr const char* PWD       = "3R9gfN4up9ar";
 constexpr const char* PWD = "8igMacNet";
 // constexpr const char* SERVER_IP = "192.168.1.120";
-constexpr const char* SERVER_IP = "192.168.0.211";
-constexpr int SERVER_PORT       = 8080;
+
+constexpr const char* SERVER_IP        = "192.168.0.74";
+constexpr int SERVER_PORT              = 8080;
+
+constexpr const char* MQTT_BROKER_HOST = SERVER_IP;
+constexpr int MQTT_BROKER_PORT    = 1883;
+constexpr const char* GROUP_ID         = "12";
+constexpr const char* BOARD_ID         = "12";
+constexpr const char* SERVER_BOARD_ID  = "server";
 
 // IMU Magnetometer Calibration (hard-iron / soft-iron)
 // Run calibration once, read the printed values from serial, then update these constants.
@@ -166,7 +173,7 @@ constexpr int MID   = 0b0100;
 
 // Global Vars
 
-extern Mail<std::array<char, 256>, 64> mail_udp_cmd;
+extern Mail<std::array<char, 256>, 64> mail_mqtt_cmd;
 extern Mail<std::array<char, 256>, 64> mail_serial_debug;
 extern Mail<std::array<char, 256>, 64> mail_wifi_tx;
 
@@ -247,7 +254,7 @@ extern MFRC522_I2C rfid;
 
 extern ICM_20948_I2C imu;
 
-extern WiFiUDP udp;
+extern MiniMessenger messenger;
 
 
 // Function Prototype

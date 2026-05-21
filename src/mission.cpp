@@ -122,11 +122,11 @@ void func_mission() {
         }
         }
 
-        // WiFi cmd analysis
-        while (!mail_udp_cmd.empty()) {
-            std::array<char, 256>* cmd_ptr = mail_udp_cmd.try_get();
+        // MQTT cmd analysis
+        while (!mail_mqtt_cmd.empty()) {
+            std::array<char, 256>* cmd_ptr = mail_mqtt_cmd.try_get();
             bash.execute(cmd_ptr->data());
-            mail_udp_cmd.free(cmd_ptr);
+            mail_mqtt_cmd.free(cmd_ptr);
         }
 
         ThisThread::sleep_for(10ms);
