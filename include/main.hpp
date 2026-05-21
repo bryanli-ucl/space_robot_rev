@@ -135,7 +135,7 @@ constexpr int SERVER_PORT              = 8080;
 constexpr const char* MQTT_BROKER_HOST = SERVER_IP;
 constexpr int MQTT_BROKER_PORT    = 1883;
 constexpr const char* GROUP_ID         = "12";
-constexpr const char* BOARD_ID         = "12";
+constexpr const char* BOARD_ID         = "Bryan";
 constexpr const char* SERVER_BOARD_ID  = "server";
 
 // IMU Magnetometer Calibration (hard-iron / soft-iron)
