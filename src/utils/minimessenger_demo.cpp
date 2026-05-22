@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <MiniMessenger.h>
-#include <Servo.h>
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -26,18 +25,34 @@ constexpr uint16_t BROKER_PORT      = 1883;
 constexpr const char* GROUP_ID      = "12";
 constexpr const char* BOARD_ID      = "Bryan";
 constexpr const char* SERVER_ID     = "server";
-constexpr int SERVO_PIN             = 9;
+
+struct MotorPins {
+    pin_size_t en;
+    pin_size_t forward;
+    pin_size_t backward;
+};
+
+constexpr MotorPins MOTORS[] = {
+    {D3, D31, D29}, // front-left
+    {D4, D24, D26}, // front-right
+    {D2, D25, D27}, // rear-left
+    {D5, D30, D28}, // rear-right
+};
+
+constexpr pin_size_t STATUS_LED_RED   = D14;
+constexpr pin_size_t STATUS_LED_GREEN = D15;
+constexpr pin_size_t STATUS_LED_BLUE  = LEDB;
+constexpr int FULL_SPEED_PWM   = 255;
 
 MiniMessenger messenger;
-Servo myServo;
 
 bool safetyEnabled = false;
 unsigned long lastRegisterMs = 0;
 unsigned long lastStatusMs   = 0;
-unsigned long lastMoveMs     = 0;
+unsigned long lastLedMs      = 0;
 bool lastConnected           = false;
-int servoPos                 = 90;
-int sweepDirection           = 1;
+bool ledBlinkState           = false;
+bool lastMotorEnabled        = false;
 
 void logf(const char* fmt, ...) {
     char buf[192];
@@ -49,6 +64,58 @@ void logf(const char* fmt, ...) {
 
     Serial.print(buf);
     Serial1.print(buf);
+}
+
+void setLed(bool on) {
+    // GIGA RGB LEDs are active-low.
+    digitalWrite(STATUS_LED_RED, on ? LOW : HIGH);
+    digitalWrite(STATUS_LED_GREEN, on ? LOW : HIGH);
+    digitalWrite(STATUS_LED_BLUE, on ? LOW : HIGH);
+}
+
+void updateLed() {
+    if (safetyEnabled) {
+        setLed(true);
+        return;
+    }
+
+    if (millis() - lastLedMs > 250 || lastLedMs == 0) {
+        lastLedMs = millis();
+        ledBlinkState = !ledBlinkState;
+        setLed(ledBlinkState);
+    }
+}
+
+void stopMotors() {
+    for (const auto& motor : MOTORS) {
+        analogWrite(motor.en, 0);
+        digitalWrite(motor.forward, LOW);
+        digitalWrite(motor.backward, LOW);
+    }
+}
+
+void driveForwardFullSpeed() {
+    for (const auto& motor : MOTORS) {
+        digitalWrite(motor.forward, HIGH);
+        digitalWrite(motor.backward, LOW);
+        analogWrite(motor.en, FULL_SPEED_PWM);
+    }
+}
+
+void updateMotors() {
+    if (safetyEnabled == lastMotorEnabled) {
+        return;
+    }
+
+    lastMotorEnabled = safetyEnabled;
+
+    if (safetyEnabled) {
+        driveForwardFullSpeed();
+        logf("MOTORS: full speed forward\n");
+    } else {
+        stopMotors();
+        logf("MOTORS: stopped\n");
+    }
 }
 
 void onMessage(const MessageMetadata& metadata, const uint8_t* payload, size_t length) {
@@ -81,8 +148,10 @@ void onMessage(const MessageMetadata& metadata, const uint8_t* payload, size_t l
 
     if (strstr(msg, "type=emergency enabled=true") ||
         strstr(msg, "type=disable enabled=false")) {
+        if (safetyEnabled) {
+            logf("SAFETY: emergency/disable active\n");
+        }
         safetyEnabled = false;
-        logf("SAFETY: emergency/disable active\n");
         return;
     }
 }
@@ -102,8 +171,17 @@ void setup() {
          GROUP_ID,
          BOARD_ID);
 
-    myServo.attach(SERVO_PIN);
-    myServo.write(90);
+    pinMode(STATUS_LED_RED, OUTPUT);
+    pinMode(STATUS_LED_GREEN, OUTPUT);
+    pinMode(STATUS_LED_BLUE, OUTPUT);
+    setLed(false);
+
+    for (const auto& motor : MOTORS) {
+        pinMode(motor.en, OUTPUT);
+        pinMode(motor.forward, OUTPUT);
+        pinMode(motor.backward, OUTPUT);
+    }
+    stopMotors();
 
     messenger.onMessage(onMessage);
     const bool connected = messenger.begin(WIFI_SSID,
@@ -121,6 +199,8 @@ void setup() {
 
 void loop() {
     messenger.loop();
+    updateLed();
+    updateMotors();
 
     const bool connected = messenger.isConnected();
     if (connected != lastConnected) {
@@ -151,27 +231,6 @@ void loop() {
 
         const bool sent = messenger.sendToBoard(SERVER_ID, reg);
         logf("register %s: %s\n", sent ? "sent" : "failed", reg);
-    }
-
-    if (!safetyEnabled) {
-        myServo.write(90);
-        delay(10);
-        return;
-    }
-
-    if (!myServo.attached()) {
-        myServo.attach(SERVO_PIN);
-    }
-
-    if (millis() - lastMoveMs > 15) {
-        lastMoveMs = millis();
-
-        servoPos += sweepDirection;
-        if (servoPos >= 180 || servoPos <= 0) {
-            sweepDirection *= -1;
-        }
-
-        myServo.write(servoPos);
     }
 
     delay(10);

@@ -3,8 +3,6 @@
 // Includes
 
 #include <Arduino.h>
-#include <MiniMessenger.h>
-#include <WiFi.h>
 #include <Wire.h>
 #include <mbed.h>
 
@@ -123,20 +121,36 @@ constexpr uint16_t qtr_max[9] = { 564, 355, 356, 405, 383, 415, 432, 488, 490 };
 constexpr int ROBOT_ID = 12;
 
 // Server info
-// constexpr const char* SSID      = "BD4B Hyperoptic 1Gb Fibre 2.4Ghz";
-constexpr const char* SSID = "PhaseSpaceNetwork_2.4G";
-// constexpr const char* PWD       = "3R9gfN4up9ar";
-constexpr const char* PWD = "8igMacNet";
-// constexpr const char* SERVER_IP = "192.168.1.120";
-
-constexpr const char* SERVER_IP        = "192.168.0.74";
-constexpr int SERVER_PORT              = 8080;
+constexpr const char* SSID      = "BD4B Hyperoptic 1Gb Fibre 2.4Ghz";
+// constexpr const char* SSID = "PhaseSpaceNetwork_2.4G";
+constexpr const char* PWD       = "3R9gfN4up9ar";
+// constexpr const char* PWD = "8igMacNet";
+constexpr const char* SERVER_IP = "192.168.1.120";
+// constexpr const char* SERVER_IP = "192.168.0.74";
+constexpr int SERVER_PORT       = 8080;
 
 constexpr const char* MQTT_BROKER_HOST = SERVER_IP;
-constexpr int MQTT_BROKER_PORT    = 1883;
+constexpr int MQTT_BROKER_PORT         = 1883;
 constexpr const char* GROUP_ID         = "12";
-constexpr const char* BOARD_ID         = "Bryan";
+constexpr const char* BOARD_ID         = "12";
 constexpr const char* SERVER_BOARD_ID  = "server";
+
+// Task startup switches
+constexpr bool ENABLE_TASK_SERIAL_DEBUG = true;
+constexpr bool ENABLE_TASK_HEARTBEAT    = true;
+constexpr bool ENABLE_TASK_CHASSIS      = true;
+constexpr bool ENABLE_TASK_MISSION      = true;
+constexpr bool ENABLE_TASK_SENSORS      = false;
+constexpr bool ENABLE_TASK_IMU          = false;
+constexpr bool ENABLE_TASK_RFID         = false;
+constexpr bool ENABLE_MQTT              = true;
+constexpr bool ENABLE_MAIN_LOOP_LED     = false;
+
+// Sensor component switches used inside func_sensors().
+constexpr bool ENABLE_SENSOR_IR_ARRAY   = false;
+constexpr bool ENABLE_SENSOR_ULTRASONIC = false;
+constexpr bool ENABLE_SENSOR_SUN_LIGHT  = false;
+constexpr bool ENABLE_SENSOR_MOUSE      = false;
 
 // IMU Magnetometer Calibration (hard-iron / soft-iron)
 // Run calibration once, read the printed values from serial, then update these constants.
@@ -253,9 +267,6 @@ extern QTRSensors qtr;
 extern MFRC522_I2C rfid;
 
 extern ICM_20948_I2C imu;
-
-extern MiniMessenger messenger;
-
 
 // Function Prototype
 void serial_tx(const char* fmt, ...);

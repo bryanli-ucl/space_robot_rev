@@ -22,7 +22,7 @@ void func_mission() {
 
             led_red   = LEDStatus::BLINK;
             led_green = LEDStatus::OFF;
-            led_blue  = LEDStatus::OFF;
+            led_blue  = LEDStatus::BLINK;
             break;
         }
         case ButtonState::REVIVING: {
