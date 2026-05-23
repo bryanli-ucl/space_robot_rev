@@ -1,3 +1,6 @@
 .pio/
 .vscode/
 .VSCodeCounter/
+
+include/arpa/
+include/sys/
