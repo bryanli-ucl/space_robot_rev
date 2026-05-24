@@ -1,9 +1,12 @@
 #include "core_m4/rpc_bridge.hpp"
 
+#include "core_m4/commands.hpp"
 #include "core_m4/serial.hpp"
 
 #include <Arduino.h>
 #include <mbed.h>
+
+#include <string>
 
 namespace {
 
@@ -82,6 +85,14 @@ int rpc_sensor_slow_update(int seq, int sunlight, int rfid_uid, int safety, int 
     return seq;
 }
 
+int rpc_mqtt_command(std::string command) {
+    if (command.empty()) {
+        return 0;
+    }
+
+    return m4_command_enqueue("mqtt", command.c_str()) ? static_cast<int>(command.length()) : -1;
+}
+
 } // namespace
 
 void rpc_bridge_begin() {
@@ -91,6 +102,7 @@ void rpc_bridge_begin() {
     RPC.bind("m4_get_last_seq", rpc_get_last_seq);
     RPC.bind("m4_sensor_fast_update", rpc_sensor_fast_update);
     RPC.bind("m4_sensor_slow_update", rpc_sensor_slow_update);
+    RPC.bind("m4_mqtt_command", rpc_mqtt_command);
     loggf("RPC Begin\n");
 }
 

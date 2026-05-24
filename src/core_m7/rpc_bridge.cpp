@@ -11,6 +11,8 @@
 #include <Arduino.h>
 #include <RPC.h>
 
+#include <string>
+
 namespace {
 
 uint32_t last_fast_push_ms = 0;
@@ -126,4 +128,19 @@ bool rpc_bridge_begin() {
 void rpc_bridge_update(uint32_t now_ms) {
     push_fast_sensor_data(now_ms);
     push_slow_sensor_data(now_ms);
+}
+
+bool rpc_bridge_send_m4_command(const char* command) {
+    if (command == nullptr || command[0] == '\0') {
+        return false;
+    }
+
+    const int result = RPC.call("m4_mqtt_command", std::string(command)).as<int>();
+    if (RPC.timedOut() || result < 0) {
+        loggf("[m7-rpc] command push failed rc=%d cmd=%s\n", result, command);
+        return false;
+    }
+
+    loggf("[m7-rpc] command pushed bytes=%d cmd=%s\n", result, command);
+    return true;
 }

@@ -2,6 +2,7 @@
 
 #include "config.hpp"
 #include "core_m4/bash.hpp"
+#include "core_m4/commands.hpp"
 
 #include <Arduino.h>
 #include <mbed.h>
@@ -44,7 +45,7 @@ void serial_command_entry() {
 
                 command[command_len] = '\0';
                 loggf("[m4-serial-cmd] rx: %s\n", command.data());
-                bash.execute(command.data());
+                m4_command_enqueue("serial", command.data());
                 command_len = 0;
             } else if (c == '\b' || c == 0x7f) {
                 if (command_len > 0) {

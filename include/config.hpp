@@ -21,13 +21,13 @@ constexpr uint32_t CHASSIS_TASK_INTERVAL_MS      = 20;
 constexpr uint32_t CHASSIS_STATUS_INTERVAL_MS    = 5000;
 
 // Safety inputs and status LEDs. M4 owns these so the stop path stays close to the motor controller.
-constexpr pin_size_t REVIVING_BUTTON_PIN    = A2;
-constexpr pin_size_t KILLSWITCH_BUTTON_PIN  = A3;
-constexpr pin_size_t STATUS_RED_LED_PIN     = LEDR;
-constexpr pin_size_t STATUS_GREEN_LED_PIN   = LEDG;
-constexpr pin_size_t STATUS_BLUE_LED_PIN    = LEDB;
-constexpr uint8_t KILLSWITCH_DEBOUNCE_TICKS = 20;
-constexpr uint8_t HEARTBEAT_BLINK_TICKS     = 50;
+constexpr pin_size_t REVIVING_BUTTON_PIN     = A2;
+constexpr pin_size_t KILLSWITCH_BUTTON_PIN   = A3;
+constexpr pin_size_t STATUS_RED_LED_PIN      = LEDR;
+constexpr pin_size_t STATUS_GREEN_LED_PIN    = LEDG;
+constexpr pin_size_t STATUS_BLUE_LED_PIN     = LEDB;
+constexpr uint8_t KILLSWITCH_DEBOUNCE_TICKS  = 20;
+constexpr uint8_t HEARTBEAT_BLINK_TICKS      = 50;
 constexpr uint32_t HEARTBEAT_LOG_INTERVAL_MS = 5000;
 
 // Motor pins
@@ -56,36 +56,35 @@ constexpr pin_size_t MOTOR_RR_ENC_A    = D38;
 constexpr pin_size_t MOTOR_RR_ENC_B    = D39;
 
 // Chassis geometry and encoder conversion placeholders.
-constexpr float CHASSIS_L     = 1.0f;
-constexpr float CHASSIS_W     = 1.0f;
-constexpr float CHASSIS_R     = 0.05f;
-constexpr float COUNTS_PER_CM = 120.0f;
-constexpr float CHASSIS_YAW_KP = 0.03f;
+constexpr float CHASSIS_L              = 1.0f;
+constexpr float CHASSIS_W              = 1.0f;
+constexpr float CHASSIS_R              = 0.05f;
+constexpr float COUNTS_PER_CM          = 120.0f;
+constexpr float CHASSIS_YAW_KP         = 0.03f;
 constexpr float CHASSIS_YAW_MAX_W_CORR = 0.4f;
-constexpr float CHASSIS_MOVE_EPS = 0.01f;
-constexpr float CHASSIS_ROTATE_EPS = 0.01f;
+constexpr float CHASSIS_MOVE_EPS       = 0.01f;
+constexpr float CHASSIS_ROTATE_EPS     = 0.01f;
 
 // Movement Control
-constexpr float TURN_MAX_W         = 1.f;
-constexpr float TURN_TOLERANCE_DEG = 1.f;
-constexpr uint32_t TURN_TIMEOUT_MS = 5000;
-constexpr float LINE_KP = 0.0100f;
-constexpr float LINE_KD = 0.0040f;
-constexpr float LINE_MAX_W = 3.0f;
-constexpr uint8_t LINE_CROSS_MIN_BLACK = 7;
+constexpr float TURN_MAX_W              = 1.f;
+constexpr float TURN_TOLERANCE_DEG      = 1.f;
+constexpr uint32_t TURN_TIMEOUT_MS      = 5000;
+constexpr float LINE_KP                 = 0.0100f;
+constexpr float LINE_KD                 = 0.0040f;
+constexpr float LINE_MAX_W              = 3.0f;
+constexpr uint8_t LINE_CROSS_MIN_BLACK  = 7;
 constexpr uint16_t LINE_BLACK_THRESHOLD = 700;
-constexpr uint8_t LINE_CROSS_CONFIRM = 2;
-constexpr float WALL_KP = 0.12f;
-constexpr float WALL_KD = 0.08f;
-constexpr float WALL_YAW_KP = 0.015f;
-constexpr float WALL_MAX_W = 2.5f;
-constexpr float TURN_KP = 0.035f;
-constexpr float TURN_KI = 0.0f;
-constexpr float TURN_KD = 0.006f;
-constexpr uint8_t TURN_STABLE_COUNT = 8;
+constexpr uint8_t LINE_CROSS_CONFIRM    = 2;
+constexpr float WALL_KP                 = 0.12f;
+constexpr float WALL_KD                 = 0.08f;
+constexpr float WALL_YAW_KP             = 0.015f;
+constexpr float WALL_MAX_W              = 2.5f;
+constexpr float TURN_KP                 = 0.035f;
+constexpr float TURN_KI                 = 0.0f;
+constexpr float TURN_KD                 = 0.006f;
+constexpr uint8_t TURN_STABLE_COUNT     = 8;
 
 // IMU / AHRS
-constexpr bool ENABLE_IMU_TASK            = true;
 constexpr bool IMU_SCAN_I2C               = true;
 constexpr bool IMU_AD0_VAL                = false;
 constexpr float IMU_SAMPLE_HZ             = 100.0f;

@@ -34,6 +34,7 @@ using namespace ::std::chrono_literals;
 
 Thread task_chassis;
 Thread task_serial_command;
+Thread task_command_worker;
 Thread task_heartbeat(osPriorityBelowNormal7);
 Thread task_imu;
 Thread task_logger;
@@ -43,17 +44,15 @@ Thread task_mission;
 void setup() {
     serial_begin();
     m4_commands_begin();
+    m4_command_worker_begin();
     serial_command_begin();
     m4_chassis_begin();
     heartbeat_begin();
     m4_chassis_task_begin();
     rpc_bridge_begin();
-    if (CONFIG::M4::ENABLE_IMU_TASK) {
-        imu_begin();
-    }
+    imu_begin();
     mission_begin();
 }
-
 void loop() {
     ThisThread::sleep_for(1000ms);
 }

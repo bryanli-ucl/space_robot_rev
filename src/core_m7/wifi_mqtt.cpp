@@ -3,6 +3,7 @@
 #include "config.hpp"
 #include "core_m7/ir.hpp"
 #include "core_m7/rfid.hpp"
+#include "core_m7/rpc_bridge.hpp"
 #include "core_m7/serial.hpp"
 #include "core_m7/sunlight.hpp"
 #include "core_m7/ultrasonic.hpp"
@@ -38,6 +39,7 @@ bool send_register();
 void update_connection_state(bool connected);
 void update_status_log(uint32_t now_ms, bool connected);
 void update_register(bool connected);
+bool extract_command(const char* msg, char* command, size_t command_size);
 
 } // namespace
 
@@ -232,6 +234,16 @@ void on_mqtt_message(const MessageMetadata& metadata, const uint8_t* payload, si
         return;
     }
 
+    char command[MiniMessenger::kMaxPayloadSize + 1];
+    if (extract_command(msg, command, sizeof(command))) {
+        loggf("[m7-mqtt] command from=%s target=%s: %s\n",
+        metadata.fromBoardId,
+        metadata.target,
+        command);
+        rpc_bridge_send_m4_command(command);
+        return;
+    }
+
     loggf("[m7-mqtt] rx [%s -> %s group=%s]: %s\n",
     metadata.fromBoardId,
     metadata.target,
@@ -297,6 +309,46 @@ void update_register(bool connected) {
     }
 
     register_sent = send_register();
+}
+
+bool extract_command(const char* msg, char* command, size_t command_size) {
+    if (msg == nullptr || command == nullptr || command_size == 0) {
+        return false;
+    }
+
+    const char* start = nullptr;
+    if (strncmp(msg, "type=command", 12) == 0 || strncmp(msg, "type=cmd", 8) == 0) {
+        start = strstr(msg, " cmd=");
+        if (start != nullptr) {
+            start += 5;
+        } else {
+            start = strstr(msg, " command=");
+            if (start != nullptr) {
+                start += 9;
+            }
+        }
+    } else if (strncmp(msg, "cmd=", 4) == 0) {
+        start = msg + 4;
+    } else if (strncmp(msg, "command=", 8) == 0) {
+        start = msg + 8;
+    } else {
+        start = msg;
+    }
+
+    if (start == nullptr) {
+        return false;
+    }
+
+    while (*start == ' ' || *start == '\t') {
+        start++;
+    }
+
+    if (*start == '\0') {
+        return false;
+    }
+
+    strlcpy(command, start, command_size);
+    return true;
 }
 
 } // namespace

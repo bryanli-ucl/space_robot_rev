@@ -12,15 +12,24 @@
 #include <mbed.h>
 #include <mbed_stats.h>
 
+#include <array>
 #include <stdlib.h>
 #include <string.h>
 
 using namespace std::chrono_literals;
 using namespace ::rtos;
 
+extern Thread task_command_worker;
+
 namespace {
 
+constexpr size_t COMMAND_QUEUE_DEPTH = 16;
+constexpr size_t COMMAND_MESSAGE_SIZE = 256;
+
+Mail<std::array<char, COMMAND_MESSAGE_SIZE>, COMMAND_QUEUE_DEPTH> command_mail;
+
 bool commands_registered = false;
+bool command_worker_started = false;
 
 bool parse_float(const char* text, float* out) {
     if (text == nullptr || out == nullptr) {
@@ -593,4 +602,46 @@ void m4_commands_begin() {
 
     commands_registered = true;
     loggf("[m4-commands] registered %u commands\n", static_cast<unsigned>(bash.commands.size()));
+}
+
+void m4_command_worker_begin() {
+    if (command_worker_started) {
+        return;
+    }
+
+    const osStatus status = task_command_worker.start([] {
+        loggf("[m4-command-worker] task ready\n");
+        while (true) {
+            auto* message = command_mail.try_get_for(100ms);
+            if (message == nullptr) {
+                continue;
+            }
+
+            loggf("[m4-command-worker] exec: %s\n", message->data());
+            bash.execute(message->data());
+            command_mail.free(message);
+        }
+    });
+
+    command_worker_started = status == osOK;
+    if (!command_worker_started) {
+        loggf("[m4-command-worker] start failed status=%d\n", status);
+    }
+}
+
+bool m4_command_enqueue(const char* source, const char* command) {
+    if (command == nullptr || command[0] == '\0') {
+        return false;
+    }
+
+    auto* message = command_mail.try_alloc();
+    if (message == nullptr) {
+        loggf("[m4-command-worker] queue full, drop from %s: %s\n", source ? source : "unknown", command);
+        return false;
+    }
+
+    strlcpy(message->data(), command, message->size());
+    command_mail.put(message);
+    loggf("[m4-command-worker] queued from %s: %s\n", source ? source : "unknown", message->data());
+    return true;
 }
