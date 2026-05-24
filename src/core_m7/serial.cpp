@@ -1,18 +1,21 @@
-#include "m7_serial.hpp"
+#include "core_m7/serial.hpp"
 
 #include "config.hpp"
 
 #include <Arduino.h>
 
+#include <array>
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 
 void serial_begin() {
-    Serial2.begin(CONFIG::M7::SERIAL_BAUD);
+    Serial1.begin(CONFIG::M7::SERIAL_BAUD);
     delay(200);
+    loggf("\n\n==================== Serial Begin, Program Start Up =================\n");
 }
 
-void serial_logf(const char* fmt, ...) {
+void loggf(const char* fmt, ...) {
     static char buf[512];
 
     va_list args;
@@ -20,5 +23,5 @@ void serial_logf(const char* fmt, ...) {
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
 
-    Serial2.print(buf);
+    Serial1.write(buf);
 }

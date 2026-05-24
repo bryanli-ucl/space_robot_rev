@@ -1,4 +1,4 @@
-#include "m7_sunlight.hpp"
+#include "core_m7/sunlight.hpp"
 
 #include "config.hpp"
 
