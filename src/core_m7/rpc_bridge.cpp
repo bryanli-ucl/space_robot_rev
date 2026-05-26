@@ -20,6 +20,14 @@ uint32_t last_slow_push_ms = 0;
 int fast_push_seq          = 0;
 int slow_push_seq          = 0;
 
+int rpc_mqtt_send_server(std::string payload) {
+    if (payload.empty()) {
+        return 0;
+    }
+
+    return wifi_mqtt_send_to_server(payload.c_str()) ? static_cast<int>(payload.length()) : -1;
+}
+
 void run_rpc_benchmark() {
     if (!CONFIG::M7::ENABLE_RPC_BENCHMARK) {
         return;
@@ -80,6 +88,8 @@ void push_fast_sensor_data(uint32_t now_ms) {
                           static_cast<int>(ir[6]),
                           static_cast<int>(ir[7]),
                           static_cast<int>(ir[8]),
+                          ir_side_left_detected() ? 1 : 0,
+                          ir_side_right_detected() ? 1 : 0,
                           static_cast<int>(ultrasonic_front_cm()),
                           static_cast<int>(ultrasonic_left_cm()),
                           static_cast<int>(ultrasonic_right_cm()))
@@ -121,6 +131,7 @@ bool rpc_bridge_begin() {
     }
 
     loggf("[m7] RPC ready, M4 boot requested\n");
+    RPC.bind("m7_mqtt_send_server", rpc_mqtt_send_server);
     run_rpc_benchmark();
     return true;
 }

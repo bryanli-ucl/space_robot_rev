@@ -28,6 +28,35 @@ Mail<std::array<char, LOGGER_MESSAGE_SIZE>, LOGGER_QUEUE_DEPTH> logger_mail;
 bool logger_started = false;
 bool serial_command_started = false;
 
+void poll_command_stream(Stream& stream,
+                         const char* source,
+                         std::array<char, LOGGER_MESSAGE_SIZE>& command,
+                         size_t& command_len) {
+    while (stream.available() > 0) {
+        const char c = static_cast<char>(stream.read());
+
+        if (c == '\r' || c == '\n') {
+            if (command_len == 0) {
+                continue;
+            }
+
+            command[command_len] = '\0';
+            loggf("[m4-serial-cmd] rx %s: %s\n", source, command.data());
+            m4_command_enqueue(source, command.data());
+            command_len = 0;
+        } else if (c == '\b' || c == 0x7f) {
+            if (command_len > 0) {
+                command_len--;
+            }
+        } else if (command_len < command.size() - 1) {
+            command[command_len++] = c;
+        } else {
+            command_len = 0;
+            loggf("[m4-serial-cmd] overflow on %s, command cleared\n", source);
+        }
+    }
+}
+
 void serial_command_entry() {
     std::array<char, LOGGER_MESSAGE_SIZE> command;
     size_t command_len = 0;
@@ -35,29 +64,8 @@ void serial_command_entry() {
     loggf("[m4-serial-cmd] task ready\n");
 
     while (true) {
-        while (Serial2.available() > 0) {
-            const char c = static_cast<char>(Serial2.read());
-
-            if (c == '\r' || c == '\n') {
-                if (command_len == 0) {
-                    continue;
-                }
-
-                command[command_len] = '\0';
-                loggf("[m4-serial-cmd] rx: %s\n", command.data());
-                m4_command_enqueue("serial", command.data());
-                command_len = 0;
-            } else if (c == '\b' || c == 0x7f) {
-                if (command_len > 0) {
-                    command_len--;
-                }
-            } else if (command_len < command.size() - 1) {
-                command[command_len++] = c;
-            } else {
-                command_len = 0;
-                loggf("[m4-serial-cmd] overflow, command cleared\n");
-            }
-        }
+        poll_command_stream(Serial1, "serial1", command, command_len);
+        poll_command_stream(Serial2, "serial2", command, command_len);
 
         ThisThread::sleep_for(std::chrono::milliseconds(CONFIG::M4::SERIAL_DEBUG_TASK_INTERVAL_MS));
     }
@@ -69,7 +77,7 @@ void write_serial_chunked(const char* text, size_t len) {
 
     while (remaining > 0) {
         const size_t chunk   = min(remaining, SERIAL_WRITE_CHUNK);
-        const size_t written = Serial2.write(reinterpret_cast<const uint8_t*>(cursor), chunk);
+        const size_t written = Serial1.write(reinterpret_cast<const uint8_t*>(cursor), chunk);
         if (written == 0) {
             ThisThread::sleep_for(1ms);
             continue;
@@ -110,7 +118,7 @@ void enqueue_log(const char* text) {
 } // namespace
 
 void serial_begin() {
-    Serial2.begin(CONFIG::M4::SERIAL_BAUD);
+    Serial1.begin(CONFIG::M4::SERIAL_BAUD);
     delay(200);
     logger_begin();
     loggf("\n\n==================== Serial Begin, Program Start Up =================\n");
@@ -146,9 +154,9 @@ void logger_begin() {
     const osStatus status = task_logger.start(logger_entry);
     logger_started        = status == osOK;
     if (!logger_started) {
-        Serial2.write("[m4-logger] start failed\n");
+        Serial1.write("[m4-logger] start failed\n");
     } else {
-        Serial2.write("[m4-logger] start successed\n");
+        Serial1.write("[m4-logger] start successed\n");
     }
 }
 

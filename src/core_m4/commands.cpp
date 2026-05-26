@@ -76,6 +76,24 @@ bool parse_uint32(const char* text, uint32_t* out) {
     return true;
 }
 
+bool parse_wall_side(const char* text, WallSide* side) {
+    if (text == nullptr || side == nullptr) {
+        return false;
+    }
+
+    if (strcmp(text, "l") == 0 || strcmp(text, "left") == 0) {
+        *side = WallSide::Left;
+        return true;
+    }
+
+    if (strcmp(text, "r") == 0 || strcmp(text, "right") == 0) {
+        *side = WallSide::Right;
+        return true;
+    }
+
+    return false;
+}
+
 Motor* select_motor(const char* id) {
     if (strcmp(id, "fl") == 0) return &m4_motor_fl();
     if (strcmp(id, "fr") == 0) return &m4_motor_fr();
@@ -111,6 +129,65 @@ bool ensure_not_stopped(const char* name) {
 
     command_tx("%s aborted: robot is stopped. use 'start' first.\n", name);
     return false;
+}
+
+bool motion_ok(const char* step, MotionResult result, MotionResult expected) {
+    command_tx("%s: %s\n", step, motion_result_name(result));
+    return result == expected;
+}
+
+bool wait_for_door_response(uint32_t timeout_ms) {
+    const uint32_t start_ms = millis();
+    while (millis() - start_ms < timeout_ms) {
+        if (running_state == RunningState::STOPPED) {
+            return false;
+        }
+
+        if (rpc_bridge_door_response_ready()) {
+            const bool granted = rpc_bridge_door_response_granted();
+            command_tx("door response: granted=%d\n", granted ? 1 : 0);
+            return granted;
+        }
+
+        ThisThread::sleep_for(50ms);
+    }
+
+    command_tx("door response timeout\n");
+    return false;
+}
+
+bool wait_for_front_clear(float clear_cm, uint32_t timeout_ms) {
+    const uint32_t start_ms = millis();
+    uint8_t stable_count = 0;
+
+    while (millis() - start_ms < timeout_ms) {
+        if (running_state == RunningState::STOPPED) {
+            return false;
+        }
+
+        const int front_cm = rpc_bridge_ultrasonic_front_cm();
+        if (front_cm < 0 || static_cast<float>(front_cm) > clear_cm) {
+            if (++stable_count >= 5) {
+                command_tx("front clear: %dcm\n", front_cm);
+                return true;
+            }
+        } else {
+            stable_count = 0;
+        }
+
+        ThisThread::sleep_for(100ms);
+    }
+
+    command_tx("front clear timeout front=%dcm\n", rpc_bridge_ultrasonic_front_cm());
+    return false;
+}
+
+uint32_t configured_or_arg_uid(uint32_t configured_uid, int argc, char** argv, int index) {
+    uint32_t uid = configured_uid;
+    if (argc > index) {
+        parse_uint32(argv[index], &uid);
+    }
+    return uid;
 }
 
 void cmd_help(int argc, char** argv) {
@@ -195,13 +272,15 @@ void print_stat() {
 
 void cmd_print(int argc, char** argv) {
     if (argc != 2) {
-        command_tx("usage: print ir|dist|sunlight|imu|state|motor|stat\n");
+        command_tx("usage: print ir|dist|rfid|sunlight|imu|state|motor|stat\n");
         return;
     }
 
     if (strcmp(argv[1], "ir") == 0) {
-        command_tx("IR pos=%d raw=%d %d %d %d %d %d %d %d %d\n",
+        command_tx("IR pos=%d side_l=%d side_r=%d raw=%d %d %d %d %d %d %d %d %d\n",
         rpc_bridge_ir_pos(),
+        rpc_bridge_ir_side_left() ? 1 : 0,
+        rpc_bridge_ir_side_right() ? 1 : 0,
         rpc_bridge_ir_raw(0),
         rpc_bridge_ir_raw(1),
         rpc_bridge_ir_raw(2),
@@ -216,6 +295,8 @@ void cmd_print(int argc, char** argv) {
         rpc_bridge_ultrasonic_front_cm(),
         rpc_bridge_ultrasonic_left_cm(),
         rpc_bridge_ultrasonic_right_cm());
+    } else if (strcmp(argv[1], "rfid") == 0) {
+        command_tx("RFID uid=%lu\n", static_cast<unsigned long>(rpc_bridge_rfid_uid()));
     } else if (strcmp(argv[1], "sunlight") == 0) {
         command_tx("Sunlight=%d\n", rpc_bridge_sunlight());
     } else if (strcmp(argv[1], "imu") == 0) {
@@ -233,8 +314,45 @@ void cmd_print(int argc, char** argv) {
     } else if (strcmp(argv[1], "stat") == 0) {
         print_stat();
     } else {
-        command_tx("usage: print ir|dist|sunlight|imu|state|motor|stat\n");
+        command_tx("usage: print ir|dist|rfid|sunlight|imu|state|motor|stat\n");
     }
+}
+
+void cmd_imu(int argc, char** argv) {
+    if (argc == 1 || strcmp(argv[1], "status") == 0) {
+        command_tx("IMU ready=%d yaw_ready=%d calibrating=%d yaw=%.2f\n",
+        imu_is_ready() ? 1 : 0,
+        imu_yaw_ready() ? 1 : 0,
+        imu_is_calibrating() ? 1 : 0,
+        imu_yaw_deg());
+        return;
+    }
+
+    bool gyro = false;
+    bool mag = false;
+    if (strcmp(argv[1], "gyro") == 0) {
+        gyro = true;
+    } else if (strcmp(argv[1], "mag") == 0) {
+        mag = true;
+    } else if (strcmp(argv[1], "all") == 0 || strcmp(argv[1], "calib") == 0 || strcmp(argv[1], "calibrate") == 0) {
+        gyro = true;
+        mag = true;
+    } else {
+        command_tx("usage: imu [status|gyro|mag|all]\n");
+        return;
+    }
+
+    if (!imu_is_ready()) {
+        command_tx("imu calibration rejected: IMU is not ready\n");
+        return;
+    }
+
+    if (!imu_request_calibration(gyro, mag)) {
+        command_tx("imu calibration rejected: busy or already queued\n");
+        return;
+    }
+
+    command_tx("imu calibration queued gyro=%d mag=%d\n", gyro ? 1 : 0, mag ? 1 : 0);
 }
 
 void cmd_motor(int argc, char** argv) {
@@ -399,11 +517,43 @@ void cmd_forward(int argc, char** argv) {
 
 void cmd_turn(int argc, char** argv) {
     if (argc < 2 || argc > 5) {
-        command_tx("usage: turn <left|right|90|-90|180|deg> [max_w] [tolerance_deg] [timeout_ms]\n");
+        command_tx("usage: turn <left|right|90|-90|180|deg> [max_w] [tolerance_deg] [timeout_ms] OR turn ir <l|r> [max_w] [timeout_ms]\n");
         return;
     }
 
     if (!ensure_not_stopped("turn")) {
+        return;
+    }
+
+    if (strcmp(argv[1], "ir") == 0) {
+        if (argc < 3 || argc > 5) {
+            command_tx("usage: turn ir <l|r|left|right> [max_w] [timeout_ms]\n");
+            return;
+        }
+
+        bool left = false;
+        if (strcmp(argv[2], "l") == 0 || strcmp(argv[2], "left") == 0 || strcmp(argv[2], "1") == 0) {
+            left = true;
+        } else if (strcmp(argv[2], "r") == 0 || strcmp(argv[2], "right") == 0 || strcmp(argv[2], "-1") == 0 || strcmp(argv[2], "0") == 0) {
+            left = false;
+        } else {
+            command_tx("turn ir side must be l/left/1 or r/right/-1/0\n");
+            return;
+        }
+
+        float max_w = CONFIG::M4::TURN_IR_W;
+        uint32_t timeout = CONFIG::M4::TURN_IR_TIMEOUT_MS;
+        if (argc >= 4 && !parse_float(argv[3], &max_w)) {
+            command_tx("turn ir max_w must be a number\n");
+            return;
+        }
+        if (argc >= 5 && !parse_uint32(argv[4], &timeout)) {
+            command_tx("turn ir timeout must be an integer\n");
+            return;
+        }
+
+        const MotionResult result = run_turn_until_ir_line(left, max_w, timeout);
+        command_tx("turn ir done: %s ir_pos=%d\n", motion_result_name(result), rpc_bridge_ir_pos());
         return;
     }
 
@@ -413,7 +563,7 @@ void cmd_turn(int argc, char** argv) {
     } else if (strcmp(argv[1], "right") == 0) {
         delta = -90.0f;
     } else if (!parse_float(argv[1], &delta)) {
-        command_tx("turn angle must be left/right or a number\n");
+        command_tx("turn angle must be left/right/ir or a number\n");
         return;
     }
 
@@ -439,7 +589,7 @@ void cmd_turn(int argc, char** argv) {
 
 void cmd_line(int argc, char** argv) {
     if (argc < 2) {
-        command_tx("usage: line front [front_cm] [speed] | line motor <cm> [speed] [front_cm] | line rfid [uid|any] [speed] [front_cm] | line cross [speed] [front_cm]\n");
+        command_tx("usage: line front [front_cm] [speed] | line motor <cm> [speed] [front_cm] | line rfid [uid|any] [speed] [front_cm] | line cross [speed] [front_cm] | line no_line [speed] [front_cm] | line corner <l|r|any> [speed] [front_cm]\n");
         return;
     }
 
@@ -507,8 +657,45 @@ void cmd_line(int argc, char** argv) {
             return;
         }
         result = run_line_follow_until_cross(speed, front);
+    } else if (strcmp(argv[1], "no_line") == 0 || strcmp(argv[1], "noline") == 0) {
+        float speed = MOTION_DEFAULT_SPEED_CM_S;
+        float front = MOTION_DEFAULT_FRONT_STOP_CM;
+        if ((argc >= 3 && !parse_float(argv[2], &speed)) ||
+            (argc >= 4 && !parse_float(argv[3], &front))) {
+            command_tx("line no_line args must be numbers\n");
+            return;
+        }
+        result = run_line_follow_until_no_line(speed, front);
+    } else if (strcmp(argv[1], "corner") == 0 || strcmp(argv[1], "right_angle") == 0) {
+        if (argc < 3) {
+            command_tx("usage: line corner <l|r|left|right|any> [speed] [front_cm]\n");
+            return;
+        }
+
+        float speed = MOTION_DEFAULT_SPEED_CM_S;
+        float front = MOTION_DEFAULT_FRONT_STOP_CM;
+        int arg = 3;
+        if (argc > arg && !parse_float(argv[arg++], &speed)) {
+            command_tx("line corner speed must be a number\n");
+            return;
+        }
+        if (argc > arg && !parse_float(argv[arg], &front)) {
+            command_tx("line corner front_cm must be a number\n");
+            return;
+        }
+
+        if (strcmp(argv[2], "any") == 0) {
+            result = run_line_follow_until_any_corner(speed, front);
+        } else {
+            WallSide side = WallSide::Left;
+            if (!parse_wall_side(argv[2], &side)) {
+                command_tx("line corner side must be l/left, r/right, or any\n");
+                return;
+            }
+            result = run_line_follow_until_corner(side, speed, front);
+        }
     } else {
-        command_tx("usage: line front|motor|rfid|cross ...\n");
+        command_tx("usage: line front|motor|rfid|cross|no_line|corner ...\n");
         return;
     }
 
@@ -581,6 +768,153 @@ void cmd_drive(int argc, char** argv) {
     command_tx("drive done: %s\n", motion_result_name(result));
 }
 
+void cmd_wall(int argc, char** argv) {
+    if (argc < 4) {
+        command_tx("usage: wall front <l|r> <wall_cm> [front_cm] [speed] | wall motor <l|r> <wall_cm> <distance_cm> [speed] [front_cm] | wall rfid <l|r> <wall_cm> [uid|any] [speed] [front_cm]\n");
+        return;
+    }
+
+    if (!ensure_not_stopped("wall")) {
+        return;
+    }
+
+    WallSide side = WallSide::Right;
+    if (!parse_wall_side(argv[2], &side)) {
+        command_tx("wall side must be l/left or r/right\n");
+        return;
+    }
+
+    float wall_cm = 0.0f;
+    if (!parse_float(argv[3], &wall_cm) || wall_cm <= 0.0f) {
+        command_tx("wall_cm must be positive\n");
+        return;
+    }
+
+    MotionResult result = MotionResult::SensorInvalid;
+    if (strcmp(argv[1], "front") == 0) {
+        float front = MOTION_DEFAULT_FRONT_STOP_CM;
+        float speed = MOTION_DEFAULT_SPEED_CM_S;
+        if ((argc >= 5 && !parse_float(argv[4], &front)) ||
+            (argc >= 6 && !parse_float(argv[5], &speed))) {
+            command_tx("wall front args must be numbers\n");
+            return;
+        }
+        result = run_wall_follow_until_front_cm(side, wall_cm, front, speed);
+    } else if (strcmp(argv[1], "motor") == 0) {
+        if (argc < 5) {
+            command_tx("usage: wall motor <l|r> <wall_cm> <distance_cm> [speed] [front_cm]\n");
+            return;
+        }
+        float distance = 0.0f;
+        float speed = MOTION_DEFAULT_SPEED_CM_S;
+        float front = MOTION_DEFAULT_FRONT_STOP_CM;
+        if (!parse_float(argv[4], &distance) ||
+            (argc >= 6 && !parse_float(argv[5], &speed)) ||
+            (argc >= 7 && !parse_float(argv[6], &front))) {
+            command_tx("wall motor args must be numbers\n");
+            return;
+        }
+        result = run_wall_follow_until_motor_cm(side, wall_cm, distance, speed, front);
+    } else if (strcmp(argv[1], "rfid") == 0) {
+        float speed = MOTION_DEFAULT_SPEED_CM_S;
+        float front = MOTION_DEFAULT_FRONT_STOP_CM;
+        uint32_t uid = 0;
+        bool use_uid = false;
+        int arg = 4;
+        if (argc > arg && strcmp(argv[arg], "any") != 0) {
+            if (parse_uint32(argv[arg], &uid)) {
+                use_uid = true;
+                arg++;
+            }
+        } else if (argc > arg) {
+            arg++;
+        }
+        if (argc > arg && !parse_float(argv[arg++], &speed)) {
+            command_tx("wall rfid speed must be a number\n");
+            return;
+        }
+        if (argc > arg && !parse_float(argv[arg], &front)) {
+            command_tx("wall rfid front_cm must be a number\n");
+            return;
+        }
+        result = use_uid ? run_wall_follow_until_rfid_uid(side, wall_cm, uid, speed, front) :
+                           run_wall_follow_until_rfid(side, wall_cm, speed, front);
+    } else {
+        command_tx("usage: wall front|motor|rfid ...\n");
+        return;
+    }
+
+    command_tx("wall done: %s\n", motion_result_name(result));
+}
+
+void cmd_base_a(int argc, char** argv) {
+    if (!ensure_not_stopped("base_a")) {
+        return;
+    }
+
+    const uint32_t uid_a = configured_or_arg_uid(CONFIG::M4::RFID_A_UID, argc, argv, 1);
+    const float speed = CONFIG::M4::BASE_LINE_SPEED_CM_S;
+    const float front = CONFIG::M4::BASE_FRONT_STOP_CM;
+
+    command_tx("base_a: line to cross -> turn left -> line to RFID A uid=%lu\n", static_cast<unsigned long>(uid_a));
+    if (!motion_ok("base_a line cross", run_line_follow_until_cross(speed, front), MotionResult::CrossLineDetected)) return;
+    if (!motion_ok("base_a turn left", run_turn_deg(90.0f), MotionResult::AngleReached)) return;
+
+    const MotionResult rfid_result = uid_a == 0 ?
+        run_line_follow_until_rfid(speed, front) :
+        run_line_follow_until_rfid_uid(uid_a, speed, front);
+    motion_ok("base_a line rfid A", rfid_result, MotionResult::RfidDetected);
+}
+
+void cmd_base_b(int argc, char** argv) {
+    if (!ensure_not_stopped("base_b")) {
+        return;
+    }
+
+    const uint32_t uid_b = configured_or_arg_uid(CONFIG::M4::RFID_B_UID, argc, argv, 1);
+    const float speed = CONFIG::M4::BASE_LINE_SPEED_CM_S;
+    const float front = CONFIG::M4::BASE_FRONT_STOP_CM;
+
+    command_tx("base_b: line to cross -> turn right -> line to RFID B uid=%lu\n", static_cast<unsigned long>(uid_b));
+    if (!motion_ok("base_b line cross", run_line_follow_until_cross(speed, front), MotionResult::CrossLineDetected)) return;
+    if (!motion_ok("base_b turn right", run_turn_deg(-90.0f), MotionResult::AngleReached)) return;
+
+    const MotionResult b_result = uid_b == 0 ?
+        run_line_follow_until_rfid(speed, front) :
+        run_line_follow_until_rfid_uid(uid_b, speed, front);
+    if (!motion_ok("base_b line rfid B", b_result, MotionResult::RfidDetected)) return;
+
+    char request[128];
+    snprintf(request,
+             sizeof(request),
+             "type=door_request door=B uid=%lu",
+             static_cast<unsigned long>(uid_b));
+    rpc_bridge_clear_door_response();
+    if (!rpc_bridge_send_mqtt_to_server(request)) {
+        command_tx("base_b door request send failed\n");
+        return;
+    }
+    if (!wait_for_door_response(CONFIG::M4::BASE_DOOR_RESPONSE_TIMEOUT_MS)) {
+        return;
+    }
+
+    if (!motion_ok("base_b line no-line", run_line_follow_until_no_line(speed, front), MotionResult::NoLineDetected)) return;
+    if (!motion_ok("base_b wall to front", run_wall_follow_until_front_cm(WallSide::Right,
+                                                                          CONFIG::M4::BASE_WALL_DIST_CM,
+                                                                          CONFIG::M4::BASE_DOOR_FRONT_CM,
+                                                                          speed),
+                   MotionResult::FrontObstacle)) return;
+
+    motion_force_stop(false);
+    command_tx("base_b waiting for door open\n");
+    if (!wait_for_front_clear(CONFIG::M4::BASE_DOOR_FRONT_CM, CONFIG::M4::BASE_DOOR_OPEN_TIMEOUT_MS)) {
+        return;
+    }
+
+    const MotionResult final_result = run_line_follow_until_rfid(speed, front);
+    motion_ok("base_b line to arena rfid", final_result, MotionResult::RfidDetected);
+}
+
 } // namespace
 
 void m4_commands_begin() {
@@ -592,13 +926,17 @@ void m4_commands_begin() {
     bash.reg_command("start", cmd_start, "leave STOPPED state and enable chassis");
     bash.reg_command("stop", cmd_stop, "enter STOPPED state and force stop chassis");
     bash.reg_command("state", cmd_state, "print running/motion/chassis state");
-    bash.reg_command("print", cmd_print, "print ir|dist|sunlight|imu|state|motor|stat");
+    bash.reg_command("print", cmd_print, "print ir|dist|rfid|sunlight|imu|state|motor|stat");
+    bash.reg_command("imu", cmd_imu, "IMU status/calibration: imu [status|gyro|mag|all]");
     bash.reg_command("motor", cmd_motor, "motor debug/control");
     bash.reg_command("move", cmd_move, "set chassis target: move <vx> <vy> <w> [duration_ms]");
     bash.reg_command("forward", cmd_forward, "manual pwm all motors: forward <pwm> [duration_ms]");
-    bash.reg_command("turn", cmd_turn, "turn by yaw: turn <deg|left|right> [max_w] [tol] [timeout_ms]");
+    bash.reg_command("turn", cmd_turn, "turn by yaw or IR: turn <deg|left|right> ... | turn ir <l|r> [max_w] [timeout_ms]");
     bash.reg_command("line", cmd_line, "blocking line follow");
     bash.reg_command("drive", cmd_drive, "blocking straight drive");
+    bash.reg_command("wall", cmd_wall, "blocking wall follow");
+    bash.reg_command("base_a", cmd_base_a, "base workflow: line cross, turn left, stop at RFID A");
+    bash.reg_command("base_b", cmd_base_b, "base workflow: line cross, turn right, RFID B, door request, tunnel exit");
 
     commands_registered = true;
     loggf("[m4-commands] registered %u commands\n", static_cast<unsigned>(bash.commands.size()));

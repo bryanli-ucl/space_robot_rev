@@ -22,6 +22,9 @@ Madgwick ahrs;
 volatile bool imu_ready_value = false;
 volatile bool yaw_ready_value = false;
 volatile float yaw_deg_value  = 0.0f;
+volatile bool calibration_busy_value = false;
+volatile bool gyro_calibration_requested = false;
+volatile bool mag_calibration_requested  = false;
 
 struct MagCalibration {
     float offset_x;
@@ -30,6 +33,18 @@ struct MagCalibration {
     float scale_x;
     float scale_y;
     float scale_z;
+};
+
+float gyro_bias_x = 0.0f;
+float gyro_bias_y = 0.0f;
+float gyro_bias_z = 0.0f;
+MagCalibration mag_calibration = {
+    CONFIG::M4::MAG_OFF_X,
+    CONFIG::M4::MAG_OFF_Y,
+    CONFIG::M4::MAG_OFF_Z,
+    CONFIG::M4::MAG_SCALE_X,
+    CONFIG::M4::MAG_SCALE_Y,
+    CONFIG::M4::MAG_SCALE_Z,
 };
 
 void set_yaw(float yaw) {
@@ -41,6 +56,11 @@ void set_yaw(float yaw) {
 void set_imu_ready(bool ready) {
     mbed::CriticalSectionLock lock;
     imu_ready_value = ready;
+}
+
+void set_calibration_busy(bool busy) {
+    mbed::CriticalSectionLock lock;
+    calibration_busy_value = busy;
 }
 
 void scan_i2c_bus(TwoWire& bus, const char* name) {
@@ -97,6 +117,10 @@ bool configure_imu() {
 void calibrate_gyro_bias(float& bias_x, float& bias_y, float& bias_z) {
     loggf("[m4-imu] gyro bias calibration begin, keep robot still\n");
 
+    bias_x = 0.0f;
+    bias_y = 0.0f;
+    bias_z = 0.0f;
+
     uint32_t sample_count   = 0;
     const uint32_t start_ms = millis();
     while (millis() - start_ms < CONFIG::M4::IMU_GYRO_BIAS_CAL_MS) {
@@ -134,8 +158,8 @@ MagCalibration default_mag_calibration() {
     };
 }
 
-MagCalibration calibrate_mag_soft_hard_iron(MagCalibration fallback) {
-    if (!CONFIG::M4::IMU_MAG_CALIBRATE) {
+MagCalibration calibrate_mag_soft_hard_iron(MagCalibration fallback, bool enabled) {
+    if (!enabled) {
         return fallback;
     }
 
@@ -202,6 +226,45 @@ MagCalibration calibrate_mag_soft_hard_iron(MagCalibration fallback) {
     return calibrated;
 }
 
+void run_requested_calibration(bool gyro, bool mag) {
+    if (!imu_is_ready()) {
+        loggf("[m4-imu] calibration request ignored, IMU is not ready\n");
+        return;
+    }
+
+    set_calibration_busy(true);
+
+    if (gyro) {
+        calibrate_gyro_bias(gyro_bias_x, gyro_bias_y, gyro_bias_z);
+    }
+
+    if (mag) {
+        mag_calibration = calibrate_mag_soft_hard_iron(mag_calibration, true);
+    }
+
+    yaw_ready_value = false;
+    ahrs.begin(CONFIG::M4::IMU_SAMPLE_HZ);
+    set_calibration_busy(false);
+    loggf("[m4-imu] calibration request complete gyro=%d mag=%d\n", gyro ? 1 : 0, mag ? 1 : 0);
+}
+
+void service_calibration_request() {
+    bool gyro = false;
+    bool mag  = false;
+
+    {
+        mbed::CriticalSectionLock lock;
+        gyro = gyro_calibration_requested;
+        mag  = mag_calibration_requested;
+        gyro_calibration_requested = false;
+        mag_calibration_requested  = false;
+    }
+
+    if (gyro || mag) {
+        run_requested_calibration(gyro, mag);
+    }
+}
+
 void imu_entry() {
     ThisThread::sleep_for(200ms);
 
@@ -222,15 +285,15 @@ void imu_entry() {
 
     ahrs.begin(CONFIG::M4::IMU_SAMPLE_HZ);
 
-    float gyro_bias_x = 0.0f;
-    float gyro_bias_y = 0.0f;
-    float gyro_bias_z = 0.0f;
+    gyro_bias_x = 0.0f;
+    gyro_bias_y = 0.0f;
+    gyro_bias_z = 0.0f;
 
-    MagCalibration mag_calibration = default_mag_calibration();
+    mag_calibration = default_mag_calibration();
 
     if (imu_ok) {
         calibrate_gyro_bias(gyro_bias_x, gyro_bias_y, gyro_bias_z);
-        mag_calibration = calibrate_mag_soft_hard_iron(mag_calibration);
+        mag_calibration = calibrate_mag_soft_hard_iron(mag_calibration, CONFIG::M4::IMU_MAG_CALIBRATE);
     } else {
         loggf("[m4-imu] calibration skipped because IMU init failed\n");
     }
@@ -240,6 +303,8 @@ void imu_entry() {
 
     uint32_t last_status_ms = 0;
     while (true) {
+        service_calibration_request();
+
         if (imu_ok && imu.dataReady()) {
             imu.getAGMT();
 
@@ -289,7 +354,27 @@ bool imu_yaw_ready() {
     return yaw_ready_value;
 }
 
+bool imu_is_calibrating() {
+    mbed::CriticalSectionLock lock;
+    return calibration_busy_value;
+}
+
 float imu_yaw_deg() {
     mbed::CriticalSectionLock lock;
     return yaw_deg_value;
+}
+
+bool imu_request_calibration(bool gyro, bool mag) {
+    if (!gyro && !mag) {
+        return false;
+    }
+
+    mbed::CriticalSectionLock lock;
+    if (calibration_busy_value || gyro_calibration_requested || mag_calibration_requested) {
+        return false;
+    }
+
+    gyro_calibration_requested = gyro;
+    mag_calibration_requested  = mag;
+    return true;
 }

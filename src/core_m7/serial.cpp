@@ -10,7 +10,7 @@
 #include <string.h>
 
 void serial_begin() {
-    Serial1.begin(CONFIG::M7::SERIAL_BAUD);
+    Serial3.begin(CONFIG::M7::SERIAL_BAUD);
     delay(200);
     loggf("\n\n==================== Serial Begin, Program Start Up =================\n");
 }
@@ -23,5 +23,5 @@ void loggf(const char* fmt, ...) {
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
 
-    Serial1.write(buf);
+    Serial3.write(buf);
 }

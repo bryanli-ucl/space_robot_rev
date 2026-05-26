@@ -7,3 +7,4 @@ void wifi_mqtt_update(uint32_t now_ms);
 bool wifi_mqtt_is_wifi_connected();
 bool wifi_mqtt_is_mqtt_connected();
 bool wifi_mqtt_is_safety_enabled();
+bool wifi_mqtt_send_to_server(const char* payload);

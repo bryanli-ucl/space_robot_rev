@@ -3,6 +3,7 @@
 #include "config.hpp"
 #include "core_m4/chassis.hpp"
 #include "core_m4/motion_control.hpp"
+#include "core_m4/rpc_bridge.hpp"
 #include "core_m4/serial.hpp"
 #include "core_m4/state.hpp"
 
@@ -23,6 +24,8 @@ enum class LedStatus {
 };
 
 bool heartbeat_started = false;
+
+constexpr uint32_t SENSOR_LOG_INTERVAL_MS = 2000;
 
 void write_led(pin_size_t pin, LedStatus status, bool blink_on) {
     bool active = false;
@@ -108,6 +111,27 @@ void update_buttons(int8_t* kill_stable) {
     }
 }
 
+void log_sensor_snapshot() {
+    loggf("[m4-heartbeat] sensors ir_pos=%d side=%d/%d ir=%d/%d/%d/%d/%d/%d/%d/%d/%d us=%d/%d/%d rfid=%d sunlight=%d\n",
+    rpc_bridge_ir_pos(),
+    rpc_bridge_ir_side_left() ? 1 : 0,
+    rpc_bridge_ir_side_right() ? 1 : 0,
+    rpc_bridge_ir_raw(0),
+    rpc_bridge_ir_raw(1),
+    rpc_bridge_ir_raw(2),
+    rpc_bridge_ir_raw(3),
+    rpc_bridge_ir_raw(4),
+    rpc_bridge_ir_raw(5),
+    rpc_bridge_ir_raw(6),
+    rpc_bridge_ir_raw(7),
+    rpc_bridge_ir_raw(8),
+    rpc_bridge_ultrasonic_front_cm(),
+    rpc_bridge_ultrasonic_left_cm(),
+    rpc_bridge_ultrasonic_right_cm(),
+    rpc_bridge_rfid_uid(),
+    rpc_bridge_sunlight());
+}
+
 void heartbeat_entry() {
     pinMode(CONFIG::M4::STATUS_RED_LED_PIN, OUTPUT);
     pinMode(CONFIG::M4::STATUS_GREEN_LED_PIN, OUTPUT);
@@ -119,6 +143,7 @@ void heartbeat_entry() {
     uint8_t blink_ticks = 0;
     int8_t kill_stable = 0;
     uint32_t last_log_ms = 0;
+    uint32_t last_sensor_log_ms = 0;
 
     apply_led_state(blink_on);
     loggf("[m4-heartbeat] task ready state=%s motion=%s\n",
@@ -141,6 +166,11 @@ void heartbeat_entry() {
         apply_led_state(blink_on);
 
         const uint32_t now_ms = millis();
+        if (last_sensor_log_ms == 0 || now_ms - last_sensor_log_ms >= SENSOR_LOG_INTERVAL_MS) {
+            last_sensor_log_ms = now_ms;
+            log_sensor_snapshot();
+        }
+
         if (last_log_ms == 0 || now_ms - last_log_ms >= CONFIG::M4::HEARTBEAT_LOG_INTERVAL_MS) {
             last_log_ms = now_ms;
             loggf("[m4-heartbeat] state=%s motion=%s ms=%lu\n",
@@ -166,4 +196,3 @@ void heartbeat_begin() {
         loggf("[m4-heartbeat] start failed status=%d\n", status);
     }
 }
-

@@ -18,6 +18,10 @@ enum class StopMode {
     Motor,
     Rfid,
     Cross,
+    NoLine,
+    LeftCorner,
+    RightCorner,
+    AnyCorner,
 };
 
 constexpr auto CONTROL_INTERVAL = 20ms;
@@ -71,6 +75,16 @@ uint8_t black_line_count() {
     return count;
 }
 
+uint8_t black_line_count_range(uint8_t begin, uint8_t end_exclusive) {
+    uint8_t count = 0;
+    for (uint8_t i = begin; i < end_exclusive && i < 9; i++) {
+        if (rpc_bridge_ir_raw(i) >= CONFIG::M4::LINE_BLACK_THRESHOLD) {
+            count++;
+        }
+    }
+    return count;
+}
+
 bool cross_line_detected(uint8_t* confirm_count) {
     if (black_line_count() >= CONFIG::M4::LINE_CROSS_MIN_BLACK) {
         if (*confirm_count < CONFIG::M4::LINE_CROSS_CONFIRM) {
@@ -81,6 +95,46 @@ bool cross_line_detected(uint8_t* confirm_count) {
     }
 
     return *confirm_count >= CONFIG::M4::LINE_CROSS_CONFIRM;
+}
+
+bool no_line_detected(uint8_t* confirm_count) {
+    if (black_line_count() <= CONFIG::M4::LINE_NO_LINE_MAX_BLACK) {
+        if (*confirm_count < CONFIG::M4::LINE_NO_LINE_CONFIRM) {
+            (*confirm_count)++;
+        }
+    } else {
+        *confirm_count = 0;
+    }
+
+    return *confirm_count >= CONFIG::M4::LINE_NO_LINE_CONFIRM;
+}
+
+bool side_corner_seen(WallSide side) {
+    if (side == WallSide::Left && rpc_bridge_ir_side_left()) {
+        return true;
+    }
+
+    if (side == WallSide::Right && rpc_bridge_ir_side_right()) {
+        return true;
+    }
+
+    const uint8_t side_black = side == WallSide::Left ?
+        black_line_count_range(0, 3) :
+        black_line_count_range(6, 9);
+
+    return side_black >= CONFIG::M4::LINE_CORNER_SIDE_MIN_BLACK;
+}
+
+bool corner_detected(WallSide side, uint8_t* confirm_count) {
+    if (side_corner_seen(side)) {
+        if (*confirm_count < CONFIG::M4::LINE_CORNER_CONFIRM) {
+            (*confirm_count)++;
+        }
+    } else {
+        *confirm_count = 0;
+    }
+
+    return *confirm_count >= CONFIG::M4::LINE_CORNER_CONFIRM;
 }
 
 void clear_manual_pwm_all() {
@@ -136,6 +190,8 @@ MotionResult run_line_follow(StopMode mode, float distance_cm, float speed_cm_s,
     const int32_t rr_start = m4_motor_rr().count();
 
     uint8_t cross_confirm = 0;
+    uint8_t left_corner_confirm = 0;
+    uint8_t right_corner_confirm = 0;
     int16_t last_err = 0;
     const float vx = cm_s_to_chassis_vx(fabsf(speed_cm_s));
 
@@ -151,6 +207,20 @@ MotionResult run_line_follow(StopMode mode, float distance_cm, float speed_cm_s,
 
         if (mode == StopMode::Cross && cross_line_detected(&cross_confirm)) {
             return stop_and_return(MotionResult::CrossLineDetected);
+        }
+
+        if (mode == StopMode::NoLine && no_line_detected(&cross_confirm)) {
+            return stop_and_return(MotionResult::NoLineDetected);
+        }
+
+        if ((mode == StopMode::LeftCorner || mode == StopMode::AnyCorner) &&
+            corner_detected(WallSide::Left, &left_corner_confirm)) {
+            return stop_and_return(MotionResult::LeftCornerDetected);
+        }
+
+        if ((mode == StopMode::RightCorner || mode == StopMode::AnyCorner) &&
+            corner_detected(WallSide::Right, &right_corner_confirm)) {
+            return stop_and_return(MotionResult::RightCornerDetected);
         }
 
         const int16_t err = static_cast<int16_t>(rpc_bridge_ir_pos()) - 4000;
@@ -264,7 +334,11 @@ const char* motion_result_name(MotionResult result) {
     case MotionResult::DistanceReached: return "distance";
     case MotionResult::FrontObstacle: return "front";
     case MotionResult::RfidDetected: return "rfid";
+    case MotionResult::LineDetected: return "line";
     case MotionResult::CrossLineDetected: return "cross";
+    case MotionResult::NoLineDetected: return "no-line";
+    case MotionResult::LeftCornerDetected: return "left-corner";
+    case MotionResult::RightCornerDetected: return "right-corner";
     case MotionResult::AngleReached: return "angle";
     case MotionResult::StopButton: return "stop";
     case MotionResult::SensorInvalid: return "sensor-invalid";
@@ -303,6 +377,19 @@ MotionResult run_line_follow_until_rfid_uid(uint32_t uid, float speed_cm_s, floa
 
 MotionResult run_line_follow_until_cross(float speed_cm_s, float front_stop_cm) {
     return run_line_follow(StopMode::Cross, 0.0f, speed_cm_s, front_stop_cm, RfidStop::none());
+}
+
+MotionResult run_line_follow_until_no_line(float speed_cm_s, float front_stop_cm) {
+    return run_line_follow(StopMode::NoLine, 0.0f, speed_cm_s, front_stop_cm, RfidStop::none());
+}
+
+MotionResult run_line_follow_until_corner(WallSide side, float speed_cm_s, float front_stop_cm) {
+    const StopMode mode = side == WallSide::Left ? StopMode::LeftCorner : StopMode::RightCorner;
+    return run_line_follow(mode, 0.0f, speed_cm_s, front_stop_cm, RfidStop::none());
+}
+
+MotionResult run_line_follow_until_any_corner(float speed_cm_s, float front_stop_cm) {
+    return run_line_follow(StopMode::AnyCorner, 0.0f, speed_cm_s, front_stop_cm, RfidStop::none());
 }
 
 MotionResult run_wall_follow_until_front_cm(WallSide side, float wall_dist_cm, float front_stop_cm, float speed_cm_s) {
@@ -385,6 +472,47 @@ MotionResult run_turn_deg(float delta_deg, float max_w, float tolerance_deg, uin
 
         float w = CONFIG::M4::TURN_KP * err + CONFIG::M4::TURN_KI * integral + CONFIG::M4::TURN_KD * derivative;
         w = constrain(w, -fabsf(max_w), fabsf(max_w));
+
+        m4_chassis().set_target(0.0f, 0.0f, w);
+        wait_control_interval();
+    }
+
+    return stop_and_return(MotionResult::Timeout);
+}
+
+MotionResult run_turn_until_ir_line(bool turn_left, float max_w, uint32_t timeout_ms) {
+    prepare_blocking_motion(RfidStop::none());
+
+    const float w = turn_left ? fabsf(max_w) : -fabsf(max_w);
+    const uint32_t start_ms = millis();
+    uint8_t leave_confirm = 0;
+    uint8_t line_confirm = 0;
+    bool left_initial_line = black_line_count() < CONFIG::M4::TURN_IR_MIN_BLACK;
+
+    while (millis() - start_ms < timeout_ms) {
+        if (running_state == RunningState::STOPPED) {
+            return stop_and_return(MotionResult::StopButton);
+        }
+
+        const uint8_t black_count = black_line_count();
+
+        if (!left_initial_line) {
+            if (black_count <= CONFIG::M4::LINE_NO_LINE_MAX_BLACK) {
+                if (++leave_confirm >= CONFIG::M4::TURN_IR_LEAVE_CONFIRM) {
+                    left_initial_line = true;
+                }
+            } else {
+                leave_confirm = 0;
+            }
+        } else {
+            if (black_count >= CONFIG::M4::TURN_IR_MIN_BLACK) {
+                if (++line_confirm >= CONFIG::M4::TURN_IR_CONFIRM) {
+                    return stop_and_return(MotionResult::LineDetected);
+                }
+            } else {
+                line_confirm = 0;
+            }
+        }
 
         m4_chassis().set_target(0.0f, 0.0f, w);
         wait_control_interval();

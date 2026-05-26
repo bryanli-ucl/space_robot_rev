@@ -10,6 +10,7 @@
 
 #include <Arduino.h>
 #include <MiniMessenger.h>
+#include <RPC.h>
 #include <WiFi.h>
 
 #include <stdio.h>
@@ -22,9 +23,11 @@ MiniMessenger messenger;
 uint32_t last_scan_ms          = 0;
 uint32_t last_status_ms        = 0;
 uint32_t last_heartbeat_log_ms = 0;
+uint32_t last_register_ms      = 0;
 uint32_t heartbeat_count       = 0;
 uint32_t status_counter        = 0;
 uint32_t wifi_connected_ms     = 0;
+uint32_t register_count        = 0;
 
 bool last_connected    = false;
 bool register_sent     = false;
@@ -40,6 +43,8 @@ void update_connection_state(bool connected);
 void update_status_log(uint32_t now_ms, bool connected);
 void update_register(bool connected);
 bool extract_command(const char* msg, char* command, size_t command_size);
+bool extract_door_response(const char* msg, bool* granted);
+void push_door_response_to_m4(bool granted);
 
 } // namespace
 
@@ -105,6 +110,14 @@ bool wifi_mqtt_is_mqtt_connected() {
 
 bool wifi_mqtt_is_safety_enabled() {
     return safety_enabled;
+}
+
+bool wifi_mqtt_send_to_server(const char* payload) {
+    if (payload == nullptr || payload[0] == '\0' || !messenger_started || !messenger.isConnected()) {
+        return false;
+    }
+
+    return messenger.sendToBoard(CONFIG::M7::SERVER_ID, payload);
 }
 
 namespace {
@@ -196,6 +209,7 @@ void start_messenger() {
 
     update_status_log(millis(), connected);
     if (connected) {
+        last_register_ms = millis();
         register_sent = send_register();
     }
 }
@@ -234,6 +248,13 @@ void on_mqtt_message(const MessageMetadata& metadata, const uint8_t* payload, si
         return;
     }
 
+    bool door_granted = false;
+    if (extract_door_response(msg, &door_granted)) {
+        loggf("[m7-mqtt] door response granted=%d from=%s\n", door_granted ? 1 : 0, metadata.fromBoardId);
+        push_door_response_to_m4(door_granted);
+        return;
+    }
+
     char command[MiniMessenger::kMaxPayloadSize + 1];
     if (extract_command(msg, command, sizeof(command))) {
         loggf("[m7-mqtt] command from=%s target=%s: %s\n",
@@ -260,7 +281,14 @@ bool send_register() {
     CONFIG::M7::BOARD_ID);
 
     const bool sent = messenger.sendToBoard(CONFIG::M7::SERVER_ID, payload);
-    loggf("[m7-mqtt] register %s: %s\n", sent ? "sent" : "failed", payload);
+    if (sent) {
+        register_count++;
+    }
+    loggf("[m7-mqtt] register %s count=%lu to=%s: %s\n",
+    sent ? "sent" : "failed",
+    static_cast<unsigned long>(register_count),
+    CONFIG::M7::SERVER_ID,
+    payload);
     return sent;
 }
 
@@ -272,11 +300,16 @@ void update_connection_state(bool connected) {
     last_connected = connected;
     if (!connected) {
         register_sent = false;
+        last_register_ms = 0;
     }
 
     loggf("[m7-mqtt] MiniMessenger %s ip=%s\n",
     connected ? "connected" : "disconnected",
     WiFi.localIP().toString().c_str());
+
+    if (connected) {
+        last_register_ms = 0;
+    }
 }
 
 void update_status_log(uint32_t now_ms, bool connected) {
@@ -304,10 +337,20 @@ void update_status_log(uint32_t now_ms, bool connected) {
 }
 
 void update_register(bool connected) {
-    if (!connected || register_sent) {
+    if (!connected) {
         return;
     }
 
+    const uint32_t now_ms = millis();
+    const uint32_t interval_ms = register_sent ?
+        CONFIG::M7::MQTT_REGISTER_INTERVAL_MS :
+        CONFIG::M7::MQTT_REGISTER_RETRY_MS;
+
+    if (last_register_ms != 0 && now_ms - last_register_ms < interval_ms) {
+        return;
+    }
+
+    last_register_ms = now_ms;
     register_sent = send_register();
 }
 
@@ -349,6 +392,35 @@ bool extract_command(const char* msg, char* command, size_t command_size) {
 
     strlcpy(command, start, command_size);
     return true;
+}
+
+bool extract_door_response(const char* msg, bool* granted) {
+    if (msg == nullptr || granted == nullptr) {
+        return false;
+    }
+
+    const bool is_response = strstr(msg, "type=door_response") != nullptr ||
+                             strstr(msg, "type=door") != nullptr ||
+                             strstr(msg, "type=exit_clearance") != nullptr;
+    if (!is_response) {
+        return false;
+    }
+
+    *granted = strstr(msg, "granted=1") != nullptr ||
+               strstr(msg, "granted=true") != nullptr ||
+               strstr(msg, "status=ok") != nullptr ||
+               strstr(msg, "open=1") != nullptr ||
+               strstr(msg, "open=true") != nullptr;
+    return true;
+}
+
+void push_door_response_to_m4(bool granted) {
+    static int door_response_seq = 0;
+    const int seq = door_response_seq++;
+    const int result = RPC.call("m4_door_response_update", seq, granted ? 1 : 0).as<int>();
+    if (RPC.timedOut() || result != seq) {
+        loggf("[m7-mqtt] door response RPC failed seq=%d rc=%d\n", seq, result);
+    }
 }
 
 } // namespace

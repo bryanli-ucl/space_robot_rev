@@ -59,30 +59,54 @@ constexpr pin_size_t MOTOR_RR_ENC_B    = D39;
 constexpr float CHASSIS_L              = 1.0f;
 constexpr float CHASSIS_W              = 1.0f;
 constexpr float CHASSIS_R              = 0.05f;
-constexpr float COUNTS_PER_CM          = 120.0f;
+constexpr float COUNTS_PER_CM          = 12.0f;
 constexpr float CHASSIS_YAW_KP         = 0.03f;
 constexpr float CHASSIS_YAW_MAX_W_CORR = 0.4f;
 constexpr float CHASSIS_MOVE_EPS       = 0.01f;
 constexpr float CHASSIS_ROTATE_EPS     = 0.01f;
 
 // Movement Control
-constexpr float TURN_MAX_W              = 1.f;
-constexpr float TURN_TOLERANCE_DEG      = 1.f;
-constexpr uint32_t TURN_TIMEOUT_MS      = 5000;
-constexpr float LINE_KP                 = 0.0100f;
-constexpr float LINE_KD                 = 0.0040f;
-constexpr float LINE_MAX_W              = 3.0f;
-constexpr uint8_t LINE_CROSS_MIN_BLACK  = 7;
-constexpr uint16_t LINE_BLACK_THRESHOLD = 700;
-constexpr uint8_t LINE_CROSS_CONFIRM    = 2;
-constexpr float WALL_KP                 = 0.12f;
-constexpr float WALL_KD                 = 0.08f;
-constexpr float WALL_YAW_KP             = 0.015f;
-constexpr float WALL_MAX_W              = 2.5f;
-constexpr float TURN_KP                 = 0.035f;
-constexpr float TURN_KI                 = 0.0f;
-constexpr float TURN_KD                 = 0.006f;
-constexpr uint8_t TURN_STABLE_COUNT     = 8;
+constexpr float TURN_MAX_W               = 1.f;
+constexpr float TURN_TOLERANCE_DEG       = 1.f;
+constexpr uint32_t TURN_TIMEOUT_MS       = 5000;
+constexpr float LINE_KP                  = 0.0100f;
+constexpr float LINE_KD                  = 0.0040f;
+constexpr float LINE_MAX_W               = 3.0f;
+constexpr uint8_t LINE_CROSS_MIN_BLACK   = 7;
+constexpr uint16_t LINE_BLACK_THRESHOLD  = 700;
+constexpr uint8_t LINE_CROSS_CONFIRM     = 2;
+constexpr uint8_t LINE_NO_LINE_MAX_BLACK = 1;
+constexpr uint8_t LINE_NO_LINE_CONFIRM   = 8;
+constexpr uint8_t LINE_CORNER_SIDE_MIN_BLACK = 2;
+constexpr uint8_t LINE_CORNER_CONFIRM        = 3;
+constexpr float WALL_KP                  = 0.12f;
+constexpr float WALL_KD                  = 0.08f;
+constexpr float WALL_YAW_KP              = 0.015f;
+constexpr float WALL_MAX_W               = 2.5f;
+constexpr float TURN_KP                  = 0.035f;
+constexpr float TURN_KI                  = 0.0f;
+constexpr float TURN_KD                  = 0.006f;
+constexpr uint8_t TURN_STABLE_COUNT      = 8;
+constexpr float TURN_IR_W                = 0.8f;
+constexpr uint32_t TURN_IR_TIMEOUT_MS    = 5000;
+constexpr uint8_t TURN_IR_MIN_BLACK      = 2;
+constexpr uint8_t TURN_IR_CONFIRM        = 3;
+constexpr uint8_t TURN_IR_LEAVE_CONFIRM  = 3;
+
+// Base exit workflow. Keep UID as 0 until measured with "print rfid".
+constexpr uint32_t RFID_A_UID                    = 0;
+constexpr uint32_t RFID_B_UID                    = 0;
+constexpr float BASE_LINE_SPEED_CM_S             = 8.0f;
+constexpr float BASE_FRONT_STOP_CM               = 10.0f;
+constexpr float BASE_WALL_DIST_CM                = 10.0f;
+constexpr float BASE_DOOR_FRONT_CM               = 10.0f;
+constexpr uint32_t BASE_DOOR_RESPONSE_TIMEOUT_MS = 10000;
+constexpr uint32_t BASE_DOOR_OPEN_TIMEOUT_MS     = 15000;
+
+// Mission startup gate. Mission thread is allowed to start, but user logic waits here.
+constexpr uint32_t MISSION_START_DELAY_MS          = 3000;
+constexpr uint32_t MISSION_SENSOR_READY_TIMEOUT_MS = 8000;
+constexpr uint32_t MISSION_IMU_READY_TIMEOUT_MS    = 5000;
 
 // IMU / AHRS
 constexpr bool IMU_SCAN_I2C               = true;
@@ -111,17 +135,23 @@ namespace M7 {
 constexpr uint32_t SERIAL_BAUD = 115200;
 
 // WiFi
-constexpr const char* WIFI_SSID            = "BD4B Hyperoptic 1Gb Fibre 2.4Ghz";
-constexpr const char* WIFI_PASS            = "3R9gfN4up9ar";
+// constexpr const char* WIFI_SSID            = "BD4B Hyperoptic 1Gb Fibre 2.4Ghz";
+// constexpr const char* WIFI_PASS            = "3R9gfN4up9ar";
+
+constexpr const char* WIFI_SSID            = "PhaseSpaceNetwork_2.4G";
+constexpr const char* WIFI_PASS            = "8igMacNet";
 constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 20000;
 constexpr uint32_t WIFI_CONNECT_POLL_MS    = 200;
 
 // MQTT / MiniMessenger
-constexpr const char* MQTT_HOST = "192.168.1.120";
+// constexpr const char* MQTT_HOST = "192.168.1.120";
+constexpr const char* MQTT_HOST = "192.168.0.74";
 constexpr uint16_t MQTT_PORT    = 1883;
 constexpr const char* GROUP_ID  = "12";
-constexpr const char* BOARD_ID  = "12";
+constexpr const char* BOARD_ID  = "Bryan";
 constexpr const char* SERVER_ID = "server";
+constexpr uint32_t MQTT_REGISTER_INTERVAL_MS = 10000;
+constexpr uint32_t MQTT_REGISTER_RETRY_MS    = 2000;
 
 // Loop intervals
 constexpr uint32_t WIFI_SCAN_INTERVAL_MS     = 30000;
@@ -147,8 +177,8 @@ constexpr bool ENABLE_WIFI_UPDATE       = true;
 constexpr pin_size_t SUNLIGHT_PIN              = A1;
 constexpr uint32_t SUNLIGHT_SAMPLE_INTERVAL_MS = 100;
 
-constexpr pin_size_t IR_CTRL_O_PIN                     = D14;
-constexpr pin_size_t IR_CTRL_E_PIN                     = D15;
+constexpr pin_size_t IR_CTRL_O_PIN                     = D18;
+constexpr pin_size_t IR_CTRL_E_PIN                     = D19;
 constexpr uint8_t IR_SENSOR_COUNT                      = 9;
 constexpr uint32_t IR_SAMPLE_INTERVAL_MS               = 50;
 constexpr uint16_t IR_RC_TIMEOUT_US                    = 1000;
@@ -156,6 +186,9 @@ constexpr uint32_t IR_WIFI_SETTLE_MS                   = 3000;
 constexpr uint16_t IR_CALIBRATION_MIN[IR_SENSOR_COUNT] = { 37, 24, 26, 29, 27, 29, 27, 28, 26 };
 constexpr uint16_t IR_CALIBRATION_MAX[IR_SENSOR_COUNT] = { 564, 355, 356, 405, 383, 415, 432, 488, 490 };
 constexpr uint8_t IR_SENSOR_PINS[IR_SENSOR_COUNT]      = { D45, D46, D47, D48, D49, D50, D51, D52, D53 };
+constexpr pin_size_t IR_SIDE_LEFT_PIN                  = D16;
+constexpr pin_size_t IR_SIDE_RIGHT_PIN                 = D17;
+constexpr bool IR_SIDE_ACTIVE_LOW                      = true;
 
 constexpr pin_size_t ULTRASONIC_FRONT_TRIG_PIN   = D40;
 constexpr pin_size_t ULTRASONIC_FRONT_ECHO_PIN   = D41;

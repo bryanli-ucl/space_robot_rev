@@ -6,7 +6,11 @@ enum class MotionResult {
     DistanceReached,
     FrontObstacle,
     RfidDetected,
+    LineDetected,
     CrossLineDetected,
+    NoLineDetected,
+    LeftCornerDetected,
+    RightCornerDetected,
     AngleReached,
     StopButton,
     SensorInvalid,
@@ -53,6 +57,19 @@ float speed_cm_s    = MOTION_DEFAULT_SPEED_CM_S,
 float front_stop_cm = MOTION_DEFAULT_FRONT_STOP_CM);
 
 MotionResult run_line_follow_until_cross(
+float speed_cm_s    = MOTION_DEFAULT_SPEED_CM_S,
+float front_stop_cm = MOTION_DEFAULT_FRONT_STOP_CM);
+
+MotionResult run_line_follow_until_no_line(
+float speed_cm_s    = MOTION_DEFAULT_SPEED_CM_S,
+float front_stop_cm = MOTION_DEFAULT_FRONT_STOP_CM);
+
+MotionResult run_line_follow_until_corner(
+WallSide side,
+float speed_cm_s    = MOTION_DEFAULT_SPEED_CM_S,
+float front_stop_cm = MOTION_DEFAULT_FRONT_STOP_CM);
+
+MotionResult run_line_follow_until_any_corner(
 float speed_cm_s    = MOTION_DEFAULT_SPEED_CM_S,
 float front_stop_cm = MOTION_DEFAULT_FRONT_STOP_CM);
 
@@ -105,3 +122,8 @@ float delta_deg,
 float max_w         = CONFIG::M4::TURN_MAX_W,
 float tolerance_deg = CONFIG::M4::TURN_TOLERANCE_DEG,
 uint32_t timeout_ms = CONFIG::M4::TURN_TIMEOUT_MS);
+
+MotionResult run_turn_until_ir_line(
+bool turn_left,
+float max_w         = CONFIG::M4::TURN_IR_W,
+uint32_t timeout_ms = CONFIG::M4::TURN_IR_TIMEOUT_MS);
