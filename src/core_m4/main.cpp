@@ -1,58 +1,55 @@
-#include <Arduino.h>
-#include <Wire.h>
-#include <mbed.h>
-
+#include "chassis.hpp"
 #include "config.hpp"
-#include "core_m4/chassis.hpp"
-#include "core_m4/commands.hpp"
-#include "core_m4/heartbeat.hpp"
-#include "core_m4/imu.hpp"
-#include "core_m4/mission.hpp"
-#include "core_m4/rpc_bridge.hpp"
-#include "core_m4/serial.hpp"
+#include "imu.hpp"
+#include "logger.hpp"
+#include "motor.hpp"
+#include "rpc_bridge.hpp"
+#include "sensors.hpp"
+#include "shell.hpp"
 
-#include <math.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <algorithm>
-#include <array>
-#include <cstring>
-#include <map>
-#include <memory>
-#include <tuple>
-#include <type_traits>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
+#include <Arduino.h>
+#include <mbed.h>
 
 using namespace ::rtos;
 using namespace ::std::chrono_literals;
 
-Thread task_chassis;
-Thread task_serial_command;
-Thread task_command_worker;
-Thread task_heartbeat(osPriorityBelowNormal7);
-Thread task_imu;
+Thread task_shell;
 Thread task_logger;
-Thread task_mission;
-
+Thread task_chassis;
+Thread task_sensors;
+Thread task_imu;
 
 void setup() {
-    serial_begin();
-    m4_commands_begin();
-    m4_command_worker_begin();
-    serial_command_begin();
-    m4_chassis_begin();
-    heartbeat_begin();
-    m4_chassis_task_begin();
+
+    // ====================== Serial and Shell Begin ==========================
+
+    Serial1.begin(SERIAL_BAUD);
+    delay(200);
+
+    logger.add_output(Serial1, "serial1");
+
+    shell.add_input(Serial1, "serial1");
     rpc_bridge_begin();
+
+    // ========================== Motor and Chassis Begin =====================
+
+    motors_begin();
+    chassis_begin();
+
+    // =========================== Sensors Begin =====================
+
+    sensors_begin();
     imu_begin();
-    mission_begin();
+
+    // =========================== Start up Threads ===========================
+
+    task_logger.start(func_logger_entry);
+    task_shell.start(shell.func_shell_entry);
+    task_chassis.start(func_chassis_entry);
+    task_sensors.start(func_sensors_entry);
+    task_imu.start(func_imu_entry);
 }
+
 void loop() {
-    ThisThread::sleep_for(1000ms);
+    ThisThread::sleep_for(1s);
 }

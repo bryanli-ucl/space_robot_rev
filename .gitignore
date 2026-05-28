@@ -6,3 +6,5 @@ include/arpa/
 include/sys/
 
 old_files/
+include_old/
+src_old/

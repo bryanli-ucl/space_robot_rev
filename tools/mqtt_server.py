@@ -357,9 +357,10 @@ class MiniBroker:
         target: str,
         interval_s: float,
         enabled: bool,
+        log_interval_s: float,
     ) -> None:
         topic = f"lab/g/{group_id}/from/server/to/{target}"
-        log_every = max(1, int(round(5.0 / interval_s)))
+        log_every = 0 if log_interval_s <= 0 else max(1, int(round(log_interval_s / interval_s)))
 
         while True:
             self._heartbeat_seq += 1
@@ -369,7 +370,7 @@ class MiniBroker:
             ).encode("utf-8")
             await self.publish(topic, payload, retain=False)
 
-            if self._heartbeat_seq % log_every == 0:
+            if log_every and self._heartbeat_seq % log_every == 0:
                 print(
                     f"[heartbeat] {topic}: {payload.decode('utf-8')}",
                     flush=True,
@@ -430,6 +431,12 @@ async def main() -> None:
         help="Heartbeat enable value sent to robots",
     )
     parser.add_argument(
+        "--heartbeat-log-interval",
+        type=float,
+        default=15.0,
+        help="Seconds between heartbeat log prints. Use 0 to hide heartbeat logs.",
+    )
+    parser.add_argument(
         "--no-heartbeat",
         action="store_true",
         help="Disable automatic heartbeat publishing",
@@ -476,6 +483,7 @@ async def main() -> None:
                 target=args.heartbeat_target,
                 interval_s=args.heartbeat_interval,
                 enabled=bool(args.heartbeat_enable),
+                log_interval_s=args.heartbeat_log_interval,
             )
         )
     if not args.no_command_input:
