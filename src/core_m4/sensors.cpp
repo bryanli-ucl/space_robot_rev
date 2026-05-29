@@ -2,6 +2,7 @@
 
 #include "config.hpp"
 #include "logger.hpp"
+#include "rfid.hpp"
 
 #include <Arduino.h>
 #include <QTRSensors.h>
@@ -143,6 +144,7 @@ void func_sensors_entry() {
     while (true) {
         sensors.update_ir();
         sensors.update_ultrasonic();
+        rfid_update();
         ThisThread::sleep_for(std::chrono::milliseconds(SENSOR_TASK_INTERVAL_MS));
     }
 }

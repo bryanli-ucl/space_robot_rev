@@ -1,8 +1,10 @@
 #include "logger.hpp"
 #include "imu.hpp"
+#include "rfid.hpp"
 #include "sensors.hpp"
 #include "shell.hpp"
 
+#include <Arduino.h>
 #include <string.h>
 
 static void print_dist() {
@@ -49,6 +51,15 @@ static void print_imu() {
           imu.gyro_bias_z());
 }
 
+static void print_rfid() {
+    loggf("rfid ready=%d uid=%lu size=%u age=%lums dt=%lums\n",
+          rfid.is_ready() ? 1 : 0,
+          static_cast<unsigned long>(rfid.last_uid()),
+          rfid.last_uid_size(),
+          rfid.last_seen_ms() == 0 ? 0UL : static_cast<unsigned long>(millis() - rfid.last_seen_ms()),
+          static_cast<unsigned long>(rfid.last_duration_ms()));
+}
+
 static void sensor_cmd(int argc, char** argv) {
     if (argc == 1) {
         print_dist();
@@ -70,7 +81,12 @@ static void sensor_cmd(int argc, char** argv) {
         return;
     }
 
-    loggf("usage: sensor dist|ir|imu|status\n");
+    if (strcmp(argv[1], "rfid") == 0) {
+        print_rfid();
+        return;
+    }
+
+    loggf("usage: sensor dist|ir|imu|rfid|status\n");
 }
 
-SHELL_COMMAND("sensor", sensor_cmd, "print sensor data: sensor dist|ir|imu")
+SHELL_COMMAND("sensor", sensor_cmd, "print sensor data: sensor dist|ir|imu|rfid")

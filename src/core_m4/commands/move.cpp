@@ -1,4 +1,5 @@
 #include "chassis.hpp"
+#include "line_follower.hpp"
 #include "logger.hpp"
 #include "motor.hpp"
 #include "shell.hpp"
@@ -63,6 +64,7 @@ static void move_cmd(int argc, char** argv) {
     }
 
     if (argc == 2 && strcmp(argv[1], "stop") == 0) {
+        line_follower_stop();
         chassis_stop();
         print_chassis();
         return;
@@ -92,6 +94,7 @@ static void move_cmd(int argc, char** argv) {
         return;
     }
 
+    line_follower_stop();
     chassis.set_target(vx, vy, w);
     print_chassis();
 

@@ -16,10 +16,15 @@ constexpr int SERIAL_BAUD = 115200;
 constexpr const char* WIFI_SSID = "BD4B Hyperoptic 1Gb Fibre 2.4Ghz";
 constexpr const char* WIFI_PASS = "3R9gfN4up9ar";
 
-constexpr uint16_t WIRELESS_DEBUG_PORT   = 7777;
-constexpr uint32_t WIFI_CONNECT_RETRY_MS = 5000;
-constexpr uint32_t WIRELESS_LOG_POLL_MS  = 20;
+constexpr uint16_t WIRELESS_DEBUG_PORT            = 7777;
+constexpr uint32_t WIFI_CONNECT_RETRY_MS          = 5000;
+constexpr uint32_t WIRELESS_LOG_POLL_MS           = 20;
 constexpr uint32_t WIRELESS_TELEMETRY_INTERVAL_MS = 1000;
+
+// ================================ RFID ====================================
+constexpr uint8_t RFID_I2C_ADDR            = 0x28;
+constexpr uint32_t RFID_SAMPLE_INTERVAL_MS = 100;
+constexpr uint32_t RFID_REPEAT_COOLDOWN_MS = 200;
 
 // ================================ Motors ==================================
 constexpr pin_size_t MOTOR_RL_EN       = D2;
@@ -48,11 +53,13 @@ constexpr pin_size_t MOTOR_FR_ENC_B    = D34;
 
 // Velocity Controller
 constexpr int MOTOR_PWM_DEADBAND            = 30;
-constexpr int MOTOR_PWM_START               = 140;
+constexpr int MOTOR_PWM_START               = 220;
+constexpr int MOTOR_PWM_START_MAX           = 255;
+constexpr float MOTOR_PWM_START_RAMP_S      = 0.20f;
 constexpr int MOTOR_PWM_RUN                 = 40;
-constexpr float MOTOR_MOVING_SPEED_TH       = 15.0f;
+constexpr float MOTOR_MOVING_SPEED_TH       = 8.0f;
 constexpr float MOTOR_PID_KP                = 0.50f;
-constexpr float MOTOR_PID_KI                = 0.28f;
+constexpr float MOTOR_PID_KI                = 2.80f;
 constexpr float MOTOR_PID_KD                = 0.00f;
 constexpr float MOTOR_SPEED_KF              = 0.18f;
 constexpr float MOTOR_INTEGRAL_LIMIT        = 1000.0f;
@@ -60,16 +67,34 @@ constexpr uint32_t CHASSIS_TASK_INTERVAL_MS = 20;
 constexpr float CHASSIS_MAX_WHEEL_SPEED     = 600.0f;
 
 // Turn Controller
-constexpr float TURN_DIRECTION              = -1.0f;
-constexpr float TURN_KP                     = 3.0f;
-constexpr float TURN_KD                     = 0.25f;
-constexpr float TURN_MIN_WHEEL_SPEED        = 45.0f;
-constexpr float TURN_MAX_WHEEL_SPEED        = 320.0f;
-constexpr float TURN_SLOW_ZONE_DEG          = 18.0f;
-constexpr float TURN_TOLERANCE_DEG          = 3.0f;
-constexpr float TURN_STOP_SPEED_DPS         = 8.0f;
-constexpr uint8_t TURN_CONFIRM_COUNT        = 5;
-constexpr uint32_t TURN_TIMEOUT_MS          = 5000;
+constexpr float TURN_DIRECTION       = -1.0f;
+constexpr float TURN_KP              = 5.0f;
+constexpr float TURN_KD              = 0.20f;
+constexpr float TURN_MIN_WHEEL_SPEED = 180.0f;
+constexpr float TURN_MAX_WHEEL_SPEED = 560.0f;
+constexpr float TURN_SLOW_ZONE_DEG   = 8.0f;
+constexpr float TURN_TOLERANCE_DEG   = 5.0f;
+constexpr float TURN_STOP_SPEED_DPS  = 12.0f;
+constexpr uint8_t TURN_CONFIRM_COUNT = 5;
+constexpr uint32_t TURN_TIMEOUT_MS   = 8000;
+
+// Line Follower
+constexpr uint16_t LINE_CENTER_POS          = 4000;
+constexpr uint16_t LINE_BLACK_THRESHOLD     = 700;
+constexpr uint8_t LINE_NO_LINE_MAX_BLACK    = 0;
+constexpr uint8_t LINE_NO_LINE_CONFIRM      = 15;
+constexpr uint8_t LINE_CROSS_CONFIRM        = 2;
+constexpr uint8_t LINE_CORNER_CONFIRM       = 3;
+constexpr int16_t LINE_DEFAULT_FRONT_STOP_CM = 12;
+constexpr float LINE_WHEEL_DIAMETER_CM      = 6.0f;
+constexpr float LINE_ENCODER_COUNTS_PER_REV = 224.0f;
+constexpr float LINE_ENCODER_COUNTS_PER_CM  = LINE_ENCODER_COUNTS_PER_REV / (3.1415926f * LINE_WHEEL_DIAMETER_CM);
+constexpr float LINE_DIRECTION              = 1.0f;
+constexpr float LINE_KP                     = 0.220f;
+constexpr float LINE_KD                     = 0.180f;
+constexpr float LINE_MAX_WHEEL_SPEED        = 560.0f;
+constexpr float LINE_MIN_SPEED_SCALE        = 0.30f;
+constexpr uint32_t LINE_STATUS_INTERVAL_MS  = 500;
 
 // ================================ Sensors =================================
 

@@ -82,9 +82,10 @@ static void set_all_speed(float speed) {
     motor_rr().set_speed(speed);
 }
 
-static void print_pidtest_sample(uint32_t elapsed_ms) {
-    loggf("pidtest t=%lu fl=%.1f/%d/%.0f/%.0f fr=%.1f/%d/%.0f/%.0f rl=%.1f/%d/%.0f/%.0f rr=%.1f/%d/%.0f/%.0f\n",
+static void print_pidtest_sample(uint32_t elapsed_ms, float target) {
+    loggf("pidtest t=%lu target=%.1f fl=%.1f/%d/%.0f/%.0f fr=%.1f/%d/%.0f/%.0f rl=%.1f/%d/%.0f/%.0f rr=%.1f/%d/%.0f/%.0f\n",
     static_cast<unsigned long>(elapsed_ms),
+    target,
     motor_fl().current_speed(), motor_fl().applied_pwm(), motor_fl().output(), motor_fl().integral_value(),
     motor_fr().current_speed(), motor_fr().applied_pwm(), motor_fr().output(), motor_fr().integral_value(),
     motor_rl().current_speed(), motor_rl().applied_pwm(), motor_rl().output(), motor_rl().integral_value(),
@@ -100,7 +101,7 @@ static void run_pidtest(float target) {
     while (millis() - start_ms <= 5000) {
         const uint32_t now_ms = millis();
         if (now_ms >= next_ms) {
-            print_pidtest_sample(now_ms - start_ms);
+            print_pidtest_sample(now_ms - start_ms, target);
             next_ms += 100;
         }
         ThisThread::sleep_for(10ms);

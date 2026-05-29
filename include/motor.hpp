@@ -59,6 +59,8 @@ class Motor {
     float integral = 0.0f;
     float prev_error = 0.0f;
     float output_value = 0.0f;
+    float start_boost_time_s = 0.0f;
+    float prev_target_speed_value = 0.0f;
 };
 
 Motor& motor_fl();

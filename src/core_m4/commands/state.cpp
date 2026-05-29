@@ -1,4 +1,5 @@
 #include "chassis.hpp"
+#include "line_follower.hpp"
 #include "logger.hpp"
 #include "shell.hpp"
 #include "state.hpp"
@@ -15,6 +16,7 @@ static void stop_cmd(int argc, char** argv) {
     (void)argc;
     (void)argv;
 
+    line_follower_stop();
     chassis_stop();
     set_running_state(RunningState::STOPPED);
     loggf("state=%s\n", running_state_name(running_state));

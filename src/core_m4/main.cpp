@@ -3,6 +3,7 @@
 #include "imu.hpp"
 #include "logger.hpp"
 #include "motor.hpp"
+#include "rfid.hpp"
 #include "rpc_bridge.hpp"
 #include "sensors.hpp"
 #include "shell.hpp"
@@ -39,6 +40,7 @@ void setup() {
     // =========================== Sensors Begin =====================
 
     sensors_begin();
+    rfid_begin();
     imu_begin();
 
     // =========================== Start up Threads ===========================

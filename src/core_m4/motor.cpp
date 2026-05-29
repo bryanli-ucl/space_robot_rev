@@ -71,6 +71,10 @@ void Motor::write_pwm(int pwm) {
 
 void Motor::set_speed(float speed) {
     manual_pwm_enabled = false;
+    if (fabsf(speed - prev_target_speed_value) > 0.001f) {
+        start_boost_time_s = 0.0f;
+        prev_target_speed_value = speed;
+    }
     target_speed_value = speed;
 }
 
@@ -103,6 +107,7 @@ void Motor::update(float dt_s) {
     if (fabsf(target_speed_value) < 0.001f) {
         integral = 0.0f;
         prev_error = 0.0f;
+        start_boost_time_s = 0.0f;
         pwm_value = 0;
         output_value = 0.0f;
         digitalWrite(forward, LOW);
@@ -123,8 +128,12 @@ void Motor::update(float dt_s) {
 
     const float direction = target_speed_value > 0.0f ? 1.0f : -1.0f;
     if (!moving) {
-        output_value = direction * MOTOR_PWM_START;
+        start_boost_time_s += dt_s;
+        const float ramp = constrain(start_boost_time_s / MOTOR_PWM_START_RAMP_S, 0.0f, 1.0f);
+        const float start_pwm = MOTOR_PWM_START + (MOTOR_PWM_START_MAX - MOTOR_PWM_START) * ramp;
+        output_value = direction * start_pwm;
     } else {
+        start_boost_time_s = 0.0f;
         const float pid = kp_value * error + ki_value * integral + kd_value * derivative;
         const float feedforward = direction * (MOTOR_PWM_RUN + MOTOR_SPEED_KF * fabsf(target_speed_value));
         output_value = feedforward + pid;
@@ -136,6 +145,7 @@ void Motor::update(float dt_s) {
 
 void Motor::stop() {
     target_speed_value = 0.0f;
+    prev_target_speed_value = 0.0f;
     current_speed_value = 0.0f;
     raw_speed_value = 0.0f;
     reset_controller();
@@ -147,6 +157,7 @@ void Motor::reset_controller() {
     integral = 0.0f;
     prev_error = 0.0f;
     output_value = 0.0f;
+    start_boost_time_s = 0.0f;
 }
 
 void Motor::isr(void* ptr) {

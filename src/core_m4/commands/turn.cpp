@@ -1,6 +1,7 @@
 #include "chassis.hpp"
 #include "config.hpp"
 #include "imu.hpp"
+#include "line_follower.hpp"
 #include "logger.hpp"
 #include "shell.hpp"
 #include "state.hpp"
@@ -104,7 +105,7 @@ static void turn_cmd(int argc, char** argv) {
         return;
     }
 
-    max_w = constrain(fabsf(max_w), TURN_MIN_WHEEL_SPEED, CHASSIS_MAX_WHEEL_SPEED);
+    max_w = constrain(fabsf(max_w), TURN_MIN_WHEEL_SPEED, TURN_MAX_WHEEL_SPEED);
     tolerance_deg = fmaxf(0.2f, fabsf(tolerance_deg));
 
     const float start_yaw = imu.yaw_deg();
@@ -122,6 +123,8 @@ static void turn_cmd(int argc, char** argv) {
           tolerance_deg,
           static_cast<unsigned long>(timeout_ms));
 
+    line_follower_stop();
+
     while (millis() - start_ms < timeout_ms) {
         if (running_state == RunningState::STOPPED) {
             chassis_stop();
@@ -135,10 +138,11 @@ static void turn_cmd(int argc, char** argv) {
 
         const float yaw = imu.yaw_deg();
         const float err = wrap_deg_180(target_yaw - yaw);
-        const float derr = (err - prev_err) / dt_s;
+        const float yaw_rate_dps = -wrap_deg_180(err - prev_err) / dt_s;
+        const float derr = -yaw_rate_dps;
         prev_err = err;
 
-        if (fabsf(err) <= tolerance_deg) {
+        if (fabsf(err) <= tolerance_deg && fabsf(yaw_rate_dps) <= TURN_STOP_SPEED_DPS) {
             confirm++;
             chassis.set_target(0.0f, 0.0f, 0.0f);
             if (confirm >= TURN_CONFIRM_COUNT) {
@@ -153,8 +157,11 @@ static void turn_cmd(int argc, char** argv) {
         } else {
             confirm = 0;
             float w = TURN_KP * err + TURN_KD * derr;
-            w = constrain(w, -max_w, max_w);
-            if (fabsf(w) < TURN_MIN_WHEEL_SPEED) w = w >= 0.0f ? TURN_MIN_WHEEL_SPEED : -TURN_MIN_WHEEL_SPEED;
+            const float slow_scale = constrain(fabsf(err) / TURN_SLOW_ZONE_DEG, 0.25f, 1.0f);
+            const float limited_max_w = fmaxf(TURN_MIN_WHEEL_SPEED, max_w * slow_scale);
+            w = constrain(w, -limited_max_w, limited_max_w);
+            if (fabsf(err) <= tolerance_deg) w = 0.0f;
+            if (fabsf(w) > 0.001f && fabsf(w) < TURN_MIN_WHEEL_SPEED) w = w >= 0.0f ? TURN_MIN_WHEEL_SPEED : -TURN_MIN_WHEEL_SPEED;
             chassis.set_target(0.0f, 0.0f, TURN_DIRECTION * w);
         }
 
