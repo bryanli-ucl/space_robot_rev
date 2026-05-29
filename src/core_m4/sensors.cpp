@@ -14,6 +14,8 @@ using namespace ::std::chrono_literals;
 
 Sensors& sensors = Sensors::instance();
 
+extern void sensor_watch_update();
+
 static QTRSensors qtr;
 static QTRSensors qtr_side_left;
 static QTRSensors qtr_side_right;
@@ -145,6 +147,7 @@ void func_sensors_entry() {
         sensors.update_ir();
         sensors.update_ultrasonic();
         rfid_update();
+        sensor_watch_update();
         ThisThread::sleep_for(std::chrono::milliseconds(SENSOR_TASK_INTERVAL_MS));
     }
 }

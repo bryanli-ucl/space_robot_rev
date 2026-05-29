@@ -68,7 +68,7 @@ void Rfid::update() {
     seen_ms = now_ms;
     duration_ms = millis() - started_ms;
 
-    if (uid != reported_uid || now_ms - reported_ms > RFID_REPEAT_COOLDOWN_MS) {
+    if (log_enabled && (uid != reported_uid || now_ms - reported_ms > RFID_REPEAT_COOLDOWN_MS)) {
         reported_uid = uid;
         reported_ms = now_ms;
         loggf("rfid uid=%lu size=%u\n", static_cast<unsigned long>(uid), uid_size);

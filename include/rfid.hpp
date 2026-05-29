@@ -8,8 +8,10 @@ class Rfid {
 
     void begin();
     void update();
+    void set_log_enabled(bool enabled) { log_enabled = enabled; }
 
     bool is_ready() const { return ready; }
+    bool log_is_enabled() const { return log_enabled; }
     uint32_t last_uid() const { return uid; }
     uint32_t last_seen_ms() const { return seen_ms; }
     uint8_t last_uid_size() const { return uid_size; }
@@ -28,6 +30,7 @@ class Rfid {
     uint32_t sample_ms = 0;
     uint32_t duration_ms = 0;
     uint8_t uid_size = 0;
+    bool log_enabled = false;
 };
 
 extern Rfid& rfid;
