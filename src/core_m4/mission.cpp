@@ -401,6 +401,8 @@ static bool find_obstacle_at_cross() {
         const int16_t front_cm = sensors.ultrasonic_front_cm();
         if (front_cm > 0 && front_cm <= TASK_OBSTACLE_FRONT_CM) {
             loggf("mission obstacle detected node=%u front=%d threshold=%d\n", i + 1, front_cm, TASK_OBSTACLE_FRONT_CM);
+            set_phase("obstacle_turn_center");
+            if (!drive_blocking(TASK_DRIVE_SPEED, TASK2_CENTER_DRIVE_CM, -1)) return false;
             return true;
         }
 
