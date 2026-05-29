@@ -8,7 +8,6 @@
 #include "sensors.hpp"
 #include "shell.hpp"
 #include "state.hpp"
-#include "task_controller.hpp"
 
 #include <math.h>
 #include <stdlib.h>
@@ -51,7 +50,6 @@ static void wall_cmd(int argc, char** argv) {
 
     if (argc == 2 && strcmp(argv[1], "stop") == 0) {
         mission_stop();
-        task_controller_stop();
         wall_follower.stop();
         return;
     }
@@ -96,7 +94,6 @@ static void wall_cmd(int argc, char** argv) {
     }
 
     mission_stop();
-    task_controller_stop();
     line_follower_stop();
     wall_follower.start(side, fabsf(speed), distance_cm, target_cm);
 }

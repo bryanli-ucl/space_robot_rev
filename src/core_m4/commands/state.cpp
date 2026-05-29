@@ -4,7 +4,6 @@
 #include "mission.hpp"
 #include "shell.hpp"
 #include "state.hpp"
-#include "task_controller.hpp"
 #include "wall_follower.hpp"
 
 static void start_cmd(int argc, char** argv) {
@@ -20,7 +19,6 @@ static void stop_cmd(int argc, char** argv) {
     (void)argv;
 
     mission_stop();
-    task_controller_stop();
     wall_follower_stop();
     line_follower_stop();
     chassis_stop();

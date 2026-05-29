@@ -7,7 +7,6 @@
 #include "sensors.hpp"
 #include "shell.hpp"
 #include "state.hpp"
-#include "task_controller.hpp"
 #include "wall_follower.hpp"
 
 #include <Arduino.h>
@@ -119,7 +118,6 @@ static void turn_ir_cmd(int argc, char** argv) {
     }
 
     mission_stop();
-    task_controller_stop();
     wall_follower_stop();
     line_follower_stop();
 
@@ -229,7 +227,6 @@ static void turn_cmd(int argc, char** argv) {
           static_cast<unsigned long>(timeout_ms));
 
     mission_stop();
-    task_controller_stop();
     wall_follower_stop();
     line_follower_stop();
 

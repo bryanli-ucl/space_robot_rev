@@ -1,5 +1,3 @@
-#include "task_controller.hpp"
-
 #include "logger.hpp"
 #include "mission.hpp"
 #include "shell.hpp"
@@ -26,13 +24,11 @@ static void print_task_help() {
 static void task_cmd(int argc, char** argv) {
     if (argc == 1 || (argc == 2 && strcmp(argv[1], "status") == 0)) {
         mission_print_status();
-        task_controller.print_status();
         return;
     }
 
     if (argc == 2 && strcmp(argv[1], "stop") == 0) {
         mission_stop();
-        task_controller.stop();
         return;
     }
 
@@ -47,12 +43,7 @@ static void task_cmd(int argc, char** argv) {
         return;
     }
 
-    if (task_id == 2 || task_id == 3 || task_id == 7 || task_id == 8) {
-        mission_start_task(task_id);
-    } else {
-        mission_stop();
-        task_controller.start(task_id);
-    }
+    mission_start_task(task_id);
 }
 
 SHELL_COMMAND("task", task_cmd, "trial task control: task <1..8> [start], task status, task stop")

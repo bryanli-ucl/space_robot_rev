@@ -9,7 +9,6 @@
 #include "rfid.hpp"
 #include "sensors.hpp"
 #include "state.hpp"
-#include "task_controller.hpp"
 #include "wall_follower.hpp"
 
 #include <Arduino.h>
@@ -93,6 +92,26 @@ static bool wait_line_done(uint32_t timeout_ms) {
         if (millis() - start_ms >= timeout_ms) {
             loggf("mission line timeout phase=%s\n", mission_phase);
             line_follower_stop();
+            return false;
+        }
+
+        ThisThread::sleep_for(20ms);
+    }
+
+    return !should_stop();
+}
+
+static bool wait_wall_done(uint32_t timeout_ms) {
+    const uint32_t start_ms = millis();
+    while (wall_follower.is_active()) {
+        if (should_stop()) {
+            wall_follower_stop();
+            return false;
+        }
+
+        if (millis() - start_ms >= timeout_ms) {
+            loggf("mission wall timeout phase=%s\n", mission_phase);
+            wall_follower_stop();
             return false;
         }
 
@@ -273,6 +292,31 @@ static bool wait_blocking(uint32_t duration_ms) {
     }
 
     return true;
+}
+
+static bool run_standard_line() {
+    set_phase("standard_line");
+    line_follower.start(TASK_LINE_SPEED);
+    return wait_line_done(MISSION_LINE_TIMEOUT_MS);
+}
+
+static bool run_open_field() {
+    set_phase("open_field_drive");
+    return drive_blocking(TASK_DRIVE_SPEED, TASK_OPEN_FIELD_DISTANCE_CM, -1);
+}
+
+static bool run_ramp() {
+    set_phase("ramp_drive");
+    return drive_blocking(TASK_RAMP_SPEED, TASK_RAMP_DISTANCE_CM, LINE_DEFAULT_FRONT_STOP_CM);
+}
+
+static bool run_wall_task() {
+    int16_t target_cm = sensors.ultrasonic_right_cm();
+    if (target_cm <= 0) target_cm = 20;
+
+    set_phase("wall_follow_right");
+    wall_follower.start(WallFollower::Side::Right, TASK_WALL_SPEED, 100.0f, target_cm);
+    return wait_wall_done(MISSION_LINE_TIMEOUT_MS);
 }
 
 static bool run_exit_base() {
@@ -524,16 +568,23 @@ static void run_task(uint8_t task_id) {
     mission_task_id = task_id;
     mission_start_ms = millis();
     set_phase("start");
-    task_controller_stop();
     stop_actions();
 
     loggf("mission start task=%u\n", task_id);
 
     bool ok = false;
-    if (task_id == 2) {
+    if (task_id == 1) {
+        ok = run_standard_line();
+    } else if (task_id == 2) {
         ok = run_exit_base();
     } else if (task_id == 3) {
         ok = run_solid_grid();
+    } else if (task_id == 4) {
+        ok = run_open_field();
+    } else if (task_id == 5) {
+        ok = run_ramp();
+    } else if (task_id == 6) {
+        ok = run_wall_task();
     } else if (task_id == 7) {
         ok = run_obstacle_avoidance();
     } else if (task_id == 8) {
