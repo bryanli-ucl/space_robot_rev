@@ -15,6 +15,8 @@
 #include <Arduino.h>
 #include <math.h>
 #include <mbed.h>
+#include <stdio.h>
+#include <string.h>
 
 using namespace ::rtos;
 using namespace ::std::chrono_literals;
@@ -27,7 +29,7 @@ static Mail<MissionRequest, 4> mission_mail;
 static volatile bool mission_active = false;
 static volatile bool mission_stop_requested = false;
 static volatile uint8_t mission_task_id = 0;
-static const char* mission_phase = "idle";
+static char mission_phase[40] = "idle";
 static uint32_t mission_start_ms = 0;
 
 static float wrap_deg_180(float deg) {
@@ -47,7 +49,19 @@ static bool should_stop() {
 }
 
 static void set_phase(const char* phase) {
-    mission_phase = phase;
+    if (phase == nullptr) phase = "unknown";
+    snprintf(mission_phase, sizeof(mission_phase), "%s", phase);
+    loggf("mission phase=%s\n", mission_phase);
+}
+
+static void set_phase_node(uint8_t index) {
+    snprintf(mission_phase, sizeof(mission_phase), "grid_node_%u", index);
+    loggf("mission phase=%s\n", mission_phase);
+}
+
+static void set_phase_cross(const char* prefix, uint8_t index) {
+    if (prefix == nullptr) prefix = "cross";
+    snprintf(mission_phase, sizeof(mission_phase), "%s_%u", prefix, index);
     loggf("mission phase=%s\n", mission_phase);
 }
 
@@ -321,12 +335,221 @@ static bool run_exit_base() {
     return true;
 }
 
+static bool follow_rfid_node(uint8_t index) {
+    set_phase_node(index);
+
+    line_follower.start_rfid(TASK_LINE_SPEED, 0, true, true, LINE_DEFAULT_FRONT_STOP_CM);
+    if (!wait_line_done(MISSION_LINE_TIMEOUT_MS)) return false;
+
+    set_phase("grid_node_wait");
+    return wait_blocking(TASK3_RFID_WAIT_MS);
+}
+
+static bool follow_rfid_nodes(uint8_t count, uint8_t& node_index) {
+    for (uint8_t i = 0; i < count; i++) {
+        node_index++;
+        if (!follow_rfid_node(node_index)) return false;
+    }
+
+    return true;
+}
+
+static bool run_solid_grid() {
+    uint8_t node_index = 0;
+
+    if (!follow_rfid_nodes(TASK3_FIRST_STRAIGHT_NODES, node_index)) return false;
+
+    set_phase("grid_turn_right");
+    if (!turn_imu_then_line_blocking(TASK2_RIGHT_TURN_DEG)) return false;
+
+    if (!follow_rfid_nodes(TASK3_MIDDLE_STRAIGHT_NODES, node_index)) return false;
+
+    set_phase("grid_turn_left");
+    if (!turn_imu_then_line_blocking(TASK2_LEFT_TURN_DEG)) return false;
+
+    if (!follow_rfid_nodes(TASK3_LAST_STRAIGHT_NODES, node_index)) return false;
+
+    return true;
+}
+
+static bool follow_cross_node(const char* phase_prefix, uint8_t index, bool clear_after) {
+    set_phase_cross(phase_prefix, index);
+    line_follower.start(TASK_LINE_SPEED, LineFollower::StopMode::Cross, -1);
+    if (!wait_line_done(MISSION_LINE_TIMEOUT_MS)) return false;
+
+    if (clear_after) {
+        set_phase("clear_cross");
+        if (!drive_blocking(TASK_DRIVE_SPEED, TASK7_CROSS_CLEAR_CM, -1)) return false;
+    }
+
+    return true;
+}
+
+static bool follow_cross_nodes(const char* phase_prefix, uint8_t count, bool clear_after_last) {
+    for (uint8_t i = 0; i < count; i++) {
+        const bool clear_after = clear_after_last || i + 1 < count;
+        if (!follow_cross_node(phase_prefix, i + 1, clear_after)) return false;
+    }
+
+    return true;
+}
+
+static bool find_obstacle_at_cross() {
+    for (uint8_t i = 0; i < TASK7_DETECT_MAX_NODES; i++) {
+        if (!follow_cross_node("obstacle_detect_cross", i + 1, false)) return false;
+
+        const int16_t front_cm = sensors.ultrasonic_front_cm();
+        if (front_cm > 0 && front_cm <= TASK_OBSTACLE_FRONT_CM) {
+            loggf("mission obstacle detected node=%u front=%d threshold=%d\n", i + 1, front_cm, TASK_OBSTACLE_FRONT_CM);
+            return true;
+        }
+
+        loggf("mission obstacle not detected node=%u front=%d threshold=%d\n", i + 1, front_cm, TASK_OBSTACLE_FRONT_CM);
+        if (i + 1 < TASK7_DETECT_MAX_NODES) {
+            set_phase("obstacle_detect_clear");
+            if (!drive_blocking(TASK_DRIVE_SPEED, TASK7_CROSS_CLEAR_CM, -1)) return false;
+        }
+    }
+
+    loggf("mission obstacle detect failed after %u nodes front=%d threshold=%d\n",
+    TASK7_DETECT_MAX_NODES,
+    sensors.ultrasonic_front_cm(),
+    TASK_OBSTACLE_FRONT_CM);
+    return false;
+}
+
+static bool run_obstacle_avoidance() {
+    set_phase("obstacle_detect");
+    if (!find_obstacle_at_cross()) return false;
+
+    set_phase("obstacle_turn_right_1");
+    if (!turn_imu_then_line_blocking(TASK2_RIGHT_TURN_DEG)) return false;
+
+    if (!follow_cross_nodes("obstacle_side_out", TASK7_SIDE_NODES, true)) return false;
+
+    set_phase("obstacle_turn_left_1");
+    if (!turn_imu_then_line_blocking(TASK2_LEFT_TURN_DEG)) return false;
+
+    if (!follow_cross_nodes("obstacle_pass", TASK7_PASS_NODES, true)) return false;
+
+    set_phase("obstacle_turn_left_2");
+    if (!turn_imu_then_line_blocking(TASK2_LEFT_TURN_DEG)) return false;
+
+    if (!follow_cross_nodes("obstacle_side_back", TASK7_SIDE_NODES, true)) return false;
+
+    set_phase("obstacle_turn_right_2");
+    if (!turn_imu_then_line_blocking(TASK2_RIGHT_TURN_DEG)) return false;
+
+    return follow_cross_nodes("obstacle_finish", TASK7_FINISH_NODES, false);
+}
+
+static bool run_revive() {
+    set_phase("revive_fast");
+
+    int32_t fl0 = 0;
+    int32_t fr0 = 0;
+    int32_t rl0 = 0;
+    int32_t rr0 = 0;
+    reset_drive_counts(fl0, fr0, rl0, rr0);
+
+    uint8_t zone = 0;
+    float speed = TASK8_FAST_SPEED;
+    uint32_t last_status_ms = 0;
+    const uint32_t start_ms = millis();
+    line_follower.start(speed);
+
+    loggf("mission revive line begin fast=%.1f mid=%.1f contact=%.1f mid_front=%d contact_front=%d max_dist=%.1f timeout=%lums\n",
+    TASK8_FAST_SPEED,
+    TASK8_MID_SPEED,
+    TASK8_CONTACT_SPEED,
+    TASK8_MID_FRONT_CM,
+    TASK8_CONTACT_FRONT_CM,
+    TASK8_MAX_DISTANCE_CM,
+    static_cast<unsigned long>(TASK8_TIMEOUT_MS));
+
+    while (millis() - start_ms < TASK8_TIMEOUT_MS) {
+        if (should_stop()) {
+            line_follower_stop();
+            return false;
+        }
+
+        const float dist_cm = traveled_cm(fl0, fr0, rl0, rr0);
+        const int16_t front_cm = sensors.ultrasonic_front_cm();
+        const bool touched = sensors.revive_button_pressed();
+
+        if (touched) {
+            line_follower_stop();
+            set_phase("revive_contact");
+            loggf("mission revive contact front=%d dist=%.1f elapsed=%lums\n",
+            front_cm,
+            dist_cm,
+            static_cast<unsigned long>(millis() - start_ms));
+            return true;
+        }
+
+        if (!line_follower.is_active()) {
+            loggf("mission revive line stopped before contact front=%d dist=%.1f button=0\n", front_cm, dist_cm);
+            return false;
+        }
+
+        if (dist_cm >= TASK8_MAX_DISTANCE_CM) {
+            line_follower_stop();
+            loggf("mission revive max distance front=%d dist=%.1f target=%.1f button=0\n",
+            front_cm,
+            dist_cm,
+            TASK8_MAX_DISTANCE_CM);
+            return false;
+        }
+
+        uint8_t next_zone = zone;
+        float next_speed = speed;
+        if (front_cm > 0 && front_cm <= TASK8_CONTACT_FRONT_CM) {
+            next_zone = 2;
+            next_speed = TASK8_CONTACT_SPEED;
+        } else if (front_cm > 0 && front_cm <= TASK8_MID_FRONT_CM) {
+            next_zone = 1;
+            next_speed = TASK8_MID_SPEED;
+        } else if (front_cm > TASK8_MID_FRONT_CM) {
+            next_zone = 0;
+            next_speed = TASK8_FAST_SPEED;
+        }
+
+        if (next_zone != zone || fabsf(next_speed - speed) > 0.1f) {
+            zone = next_zone;
+            speed = next_speed;
+            if (zone == 0) set_phase("revive_fast");
+            else if (zone == 1) set_phase("revive_mid");
+            else set_phase("revive_touch");
+            line_follower.set_speed(speed);
+        }
+
+        const uint32_t now_ms = millis();
+        if (last_status_ms == 0 || now_ms - last_status_ms >= 500) {
+            last_status_ms = now_ms;
+            loggf("mission revive active phase=%s speed=%.1f front=%d dist=%.1f button=0\n",
+            mission_phase,
+            speed,
+            front_cm,
+            dist_cm);
+        }
+
+        ThisThread::sleep_for(20ms);
+    }
+
+    line_follower_stop();
+    loggf("mission revive timeout front=%d dist=%.1f button=%d\n",
+    sensors.ultrasonic_front_cm(),
+    traveled_cm(fl0, fr0, rl0, rr0),
+    sensors.revive_button_pressed() ? 1 : 0);
+    return false;
+}
+
 static void run_task(uint8_t task_id) {
     mission_active = true;
     mission_stop_requested = false;
     mission_task_id = task_id;
     mission_start_ms = millis();
-    mission_phase = "start";
+    set_phase("start");
     task_controller_stop();
     stop_actions();
 
@@ -335,6 +558,12 @@ static void run_task(uint8_t task_id) {
     bool ok = false;
     if (task_id == 2) {
         ok = run_exit_base();
+    } else if (task_id == 3) {
+        ok = run_solid_grid();
+    } else if (task_id == 7) {
+        ok = run_obstacle_avoidance();
+    } else if (task_id == 8) {
+        ok = run_revive();
     } else {
         loggf("mission task %u not implemented yet\n", task_id);
     }
@@ -348,7 +577,7 @@ static void run_task(uint8_t task_id) {
 
     mission_active = false;
     mission_task_id = 0;
-    mission_phase = "idle";
+    set_phase("idle");
 }
 
 bool mission_start_task(uint8_t task_id) {

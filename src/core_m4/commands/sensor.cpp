@@ -12,6 +12,7 @@ static bool watch_dist = false;
 static bool watch_ir = false;
 static bool watch_imu = false;
 static bool watch_rfid = false;
+static bool watch_button = false;
 static uint32_t last_watch_ms = 0;
 static constexpr uint32_t WATCH_INTERVAL_MS = 500;
 
@@ -71,11 +72,16 @@ static void print_rfid() {
           (watch_all || watch_rfid) ? 1 : 0);
 }
 
+static void print_button() {
+    loggf("revive button=%d pin=D44 active=low\n", sensors.revive_button_pressed() ? 1 : 0);
+}
+
 static void print_all() {
     print_dist();
     print_ir();
     print_imu();
     print_rfid();
+    print_button();
 }
 
 static bool* watch_flag(const char* name) {
@@ -84,16 +90,18 @@ static bool* watch_flag(const char* name) {
     if (strcmp(name, "ir") == 0) return &watch_ir;
     if (strcmp(name, "imu") == 0) return &watch_imu;
     if (strcmp(name, "rfid") == 0) return &watch_rfid;
+    if (strcmp(name, "button") == 0 || strcmp(name, "revive") == 0) return &watch_button;
     return nullptr;
 }
 
 static void print_watch_status() {
-    loggf("sensor watch all=%d dist=%d ir=%d imu=%d rfid=%d interval=%lums\n",
+    loggf("sensor watch all=%d dist=%d ir=%d imu=%d rfid=%d button=%d interval=%lums\n",
           watch_all ? 1 : 0,
           watch_dist ? 1 : 0,
           watch_ir ? 1 : 0,
           watch_imu ? 1 : 0,
           watch_rfid ? 1 : 0,
+          watch_button ? 1 : 0,
           static_cast<unsigned long>(WATCH_INTERVAL_MS));
 }
 
@@ -102,7 +110,7 @@ static bool handle_watch_command(int argc, char** argv, int name_index) {
 
     bool* flag = watch_flag(argv[name_index]);
     if (flag == nullptr) {
-        loggf("sensor watch target must be all, dist, ir, imu, or rfid\n");
+        loggf("sensor watch target must be all, dist, ir, imu, rfid, or button\n");
         return true;
     }
 
@@ -112,7 +120,7 @@ static bool handle_watch_command(int argc, char** argv, int name_index) {
     }
 
     if (argc != name_index + 3) {
-        loggf("usage: sensor [all|dist|ir|imu|rfid] watch on|off\n");
+        loggf("usage: sensor [all|dist|ir|imu|rfid|button] watch on|off\n");
         return true;
     }
 
@@ -171,7 +179,12 @@ static void sensor_cmd(int argc, char** argv) {
         return;
     }
 
-    loggf("usage: sensor [all|dist|ir|imu|rfid|status] | sensor [all|dist|ir|imu|rfid] watch on|off\n");
+    if ((strcmp(argv[1], "button") == 0 || strcmp(argv[1], "revive") == 0) && argc == 2) {
+        print_button();
+        return;
+    }
+
+    loggf("usage: sensor [all|dist|ir|imu|rfid|button|status] | sensor [all|dist|ir|imu|rfid|button] watch on|off\n");
 }
 
 void sensor_watch_update() {
@@ -188,6 +201,7 @@ void sensor_watch_update() {
     if (watch_ir) print_ir();
     if (watch_imu) print_imu();
     if (watch_rfid) print_rfid();
+    if (watch_button) print_button();
 }
 
-SHELL_COMMAND("sensor", sensor_cmd, "print sensor data: sensor dist|ir|imu|rfid")
+SHELL_COMMAND("sensor", sensor_cmd, "print sensor data: sensor dist|ir|imu|rfid|button")

@@ -121,11 +121,27 @@ constexpr float TASK_RAMP_DISTANCE_CM        = 120.0f;
 constexpr float TASK_REVIVE_MAX_DISTANCE_CM  = 80.0f;
 constexpr int16_t TASK_OBSTACLE_FRONT_CM     = 18;
 constexpr int16_t TASK_REVIVE_FRONT_CM       = 7;
+constexpr float TASK7_CROSS_CLEAR_CM         = 8.0f;
+constexpr uint8_t TASK7_DETECT_MAX_NODES     = 2;
+constexpr uint8_t TASK7_SIDE_NODES           = 1;
+constexpr uint8_t TASK7_PASS_NODES           = 2;
+constexpr uint8_t TASK7_FINISH_NODES         = 3;
+constexpr float TASK8_FAST_SPEED             = 150.0f;
+constexpr float TASK8_MID_SPEED              = 100.0f;
+constexpr float TASK8_CONTACT_SPEED          = 80.0f;
+constexpr int16_t TASK8_MID_FRONT_CM         = 20;
+constexpr int16_t TASK8_CONTACT_FRONT_CM     = 10;
+constexpr float TASK8_MAX_DISTANCE_CM        = 120.0f;
+constexpr uint32_t TASK8_TIMEOUT_MS          = 60000;
 constexpr float TASK2_CENTER_DRIVE_CM        = 10.0f;
 constexpr float TASK2_LEFT_TURN_DEG          = -90.0f;
 constexpr float TASK2_RIGHT_TURN_DEG         = 90.0f;
 constexpr int16_t TASK2_DOOR_FRONT_CM        = 10;
 constexpr uint32_t TASK2_RFID_WAIT_MS        = 2000;
+constexpr uint8_t TASK3_FIRST_STRAIGHT_NODES = 3;
+constexpr uint8_t TASK3_MIDDLE_STRAIGHT_NODES = 1;
+constexpr uint8_t TASK3_LAST_STRAIGHT_NODES  = 2;
+constexpr uint32_t TASK3_RFID_WAIT_MS        = 300;
 constexpr float MISSION_TURN_IMU_RATIO       = 0.50f;
 constexpr float MISSION_LINE_SEARCH_W        = 300.0f;
 constexpr uint32_t MISSION_LINE_SEARCH_IGNORE_MS = 300;
@@ -137,6 +153,7 @@ constexpr uint32_t MISSION_DRIVE_TIMEOUT_MS  = 8000;
 constexpr uint32_t MISSION_TURN_TIMEOUT_MS   = 8000;
 
 // ================================ Sensors =================================
+constexpr pin_size_t REVIVE_BUTTON_PIN       = D44;
 
 // Ultrasonic
 constexpr pin_size_t ULTRASONIC_FRONT_TRIG_PIN   = D40;

@@ -71,6 +71,10 @@ void LineFollower::start_rfid(float next_speed, uint32_t target_uid, bool any_ui
     rfid.is_ready() ? 1 : 0);
 }
 
+void LineFollower::set_speed(float next_speed) {
+    speed = next_speed;
+}
+
 void LineFollower::stop() {
     if (active) loggf("line stop\n");
     active               = false;

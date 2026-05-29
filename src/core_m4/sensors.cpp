@@ -98,6 +98,7 @@ void Sensors::begin() {
     pinMode(ULTRASONIC_LEFT_ECHO_PIN, INPUT);
     pinMode(ULTRASONIC_RIGHT_TRIG_PIN, OUTPUT);
     pinMode(ULTRASONIC_RIGHT_ECHO_PIN, INPUT);
+    pinMode(REVIVE_BUTTON_PIN, INPUT_PULLUP);
 
     digitalWrite(ULTRASONIC_FRONT_TRIG_PIN, LOW);
     digitalWrite(ULTRASONIC_LEFT_TRIG_PIN, LOW);
@@ -145,6 +146,7 @@ void Sensors::update_ir() {
     ir_right_value = side_right_values[0];
     ir_left_detected = ir_left_value >= IR_SIDE_LEFT_BLACK_THRESHOLD;
     ir_right_detected = ir_right_value >= IR_SIDE_RIGHT_BLACK_THRESHOLD;
+    revive_button = digitalRead(REVIVE_BUTTON_PIN) == LOW;
     ir_duration_ms = millis() - started_ms;
 }
 

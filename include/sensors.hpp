@@ -25,6 +25,7 @@ class Sensors {
     bool ir_side_left_detected() const { return ir_left_detected; }
     bool ir_side_right_detected() const { return ir_right_detected; }
     uint32_t ir_last_duration_ms() const { return ir_duration_ms; }
+    bool revive_button_pressed() const { return revive_button; }
 
     private:
     Sensors()                           = default;
@@ -52,6 +53,7 @@ class Sensors {
     uint16_t ir_right_value = 0;
     bool ir_left_detected = false;
     bool ir_right_detected = false;
+    bool revive_button = false;
     uint32_t ir_duration_ms = 0;
     uint32_t last_ir_sample_ms = 0;
 };

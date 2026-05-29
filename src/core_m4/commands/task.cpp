@@ -20,7 +20,7 @@ static bool parse_task_id(const char* text, uint8_t* out) {
 
 static void print_task_help() {
     loggf("usage: task <1..8> [start] | task stop | task status\n");
-    loggf("task 1=line, 2=intersection+rfid, 3=solid-grid skeleton, 4=open-field drive, 5=ramp drive, 6=wall, 7=obstacle detect, 8=revive approach\n");
+    loggf("task 1=line, 2=intersection+rfid, 3=solid-grid skeleton, 4=open-field drive, 5=ramp drive, 6=wall, 7=obstacle avoid, 8=revive approach\n");
 }
 
 static void task_cmd(int argc, char** argv) {
@@ -47,7 +47,7 @@ static void task_cmd(int argc, char** argv) {
         return;
     }
 
-    if (task_id == 2) {
+    if (task_id == 2 || task_id == 3 || task_id == 7 || task_id == 8) {
         mission_start_task(task_id);
     } else {
         mission_stop();

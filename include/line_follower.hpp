@@ -19,6 +19,7 @@ class LineFollower {
 
     void start(float speed, StopMode mode = StopMode::None, int16_t front_stop_cm = -1, float target_distance_cm = -1.0f);
     void start_rfid(float speed, uint32_t target_uid, bool any_uid, bool not_same, int16_t front_stop_cm = -1);
+    void set_speed(float speed);
     void stop();
     void update(float dt_s);
     void print_status() const;
