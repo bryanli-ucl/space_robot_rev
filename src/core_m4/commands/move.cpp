@@ -4,6 +4,7 @@
 #include "motor.hpp"
 #include "shell.hpp"
 #include "state.hpp"
+#include "wall_follower.hpp"
 
 #include <mbed.h>
 #include <stdlib.h>
@@ -64,6 +65,7 @@ static void move_cmd(int argc, char** argv) {
     }
 
     if (argc == 2 && strcmp(argv[1], "stop") == 0) {
+        wall_follower_stop();
         line_follower_stop();
         chassis_stop();
         print_chassis();
@@ -94,6 +96,7 @@ static void move_cmd(int argc, char** argv) {
         return;
     }
 
+    wall_follower_stop();
     line_follower_stop();
     chassis.set_target(vx, vy, w);
     print_chassis();

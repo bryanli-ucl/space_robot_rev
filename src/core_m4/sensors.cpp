@@ -37,11 +37,23 @@ static int16_t measure_ultrasonic_cm(pin_size_t trig, pin_size_t echo) {
     return cm;
 }
 
-static int16_t low_pass_ultrasonic_cm(int16_t raw_cm, float& filtered_cm) {
-    if (raw_cm < 0) return -1;
+static int16_t low_pass_ultrasonic_cm(int16_t raw_cm, float& filtered_cm, uint8_t& invalid_count) {
+    if (raw_cm < 0) {
+        if (filtered_cm >= 0.0f && invalid_count < ULTRASONIC_INVALID_HOLD_COUNT) {
+            invalid_count++;
+            return static_cast<int16_t>(filtered_cm + 0.5f);
+        }
+
+        filtered_cm = -1.0f;
+        return -1;
+    }
+
+    invalid_count = 0;
 
     if (filtered_cm < 0.0f) {
         filtered_cm = static_cast<float>(raw_cm);
+    } else if (fabsf(static_cast<float>(raw_cm) - filtered_cm) > ULTRASONIC_MAX_VALID_JUMP_CM) {
+        return static_cast<int16_t>(filtered_cm + 0.5f);
     } else {
         filtered_cm += ULTRASONIC_LOW_PASS_ALPHA * (static_cast<float>(raw_cm) - filtered_cm);
     }
@@ -105,13 +117,13 @@ void Sensors::update_ultrasonic() {
 
     if (ultrasonic_index == 0) {
         front_raw_cm = measure_ultrasonic_cm(ULTRASONIC_FRONT_TRIG_PIN, ULTRASONIC_FRONT_ECHO_PIN);
-        front_cm = low_pass_ultrasonic_cm(front_raw_cm, front_filtered_cm);
+        front_cm = low_pass_ultrasonic_cm(front_raw_cm, front_filtered_cm, front_invalid_count);
     } else if (ultrasonic_index == 1) {
         left_raw_cm = measure_ultrasonic_cm(ULTRASONIC_LEFT_TRIG_PIN, ULTRASONIC_LEFT_ECHO_PIN);
-        left_cm = low_pass_ultrasonic_cm(left_raw_cm, left_filtered_cm);
+        left_cm = low_pass_ultrasonic_cm(left_raw_cm, left_filtered_cm, left_invalid_count);
     } else {
         right_raw_cm = measure_ultrasonic_cm(ULTRASONIC_RIGHT_TRIG_PIN, ULTRASONIC_RIGHT_ECHO_PIN);
-        right_cm = low_pass_ultrasonic_cm(right_raw_cm, right_filtered_cm);
+        right_cm = low_pass_ultrasonic_cm(right_raw_cm, right_filtered_cm, right_invalid_count);
     }
 
     ultrasonic_duration_ms = millis() - started_ms;

@@ -5,6 +5,7 @@
 #include "logger.hpp"
 #include "shell.hpp"
 #include "state.hpp"
+#include "wall_follower.hpp"
 
 #include <Arduino.h>
 #include <math.h>
@@ -123,6 +124,7 @@ static void turn_cmd(int argc, char** argv) {
           tolerance_deg,
           static_cast<unsigned long>(timeout_ms));
 
+    wall_follower_stop();
     line_follower_stop();
 
     while (millis() - start_ms < timeout_ms) {

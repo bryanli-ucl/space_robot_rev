@@ -4,6 +4,7 @@
 #include "logger.hpp"
 #include "shell.hpp"
 #include "state.hpp"
+#include "wall_follower.hpp"
 
 #include <stdlib.h>
 #include <string.h>
@@ -97,6 +98,7 @@ static void line_cmd(int argc, char** argv) {
         int16_t front_cm = -1;
         if (!parse_speed(argv[2], &speed) || !parse_optional_front(argc, argv, 3, &front_cm)) return;
 
+        wall_follower_stop();
         line_follower.start(speed, LineFollower::StopMode::Cross, front_cm);
         return;
     }
@@ -116,6 +118,7 @@ static void line_cmd(int argc, char** argv) {
             return;
         }
 
+        wall_follower_stop();
         line_follower.start(speed, LineFollower::StopMode::Front, front_cm);
         return;
     }
@@ -137,6 +140,7 @@ static void line_cmd(int argc, char** argv) {
             return;
         }
 
+        wall_follower_stop();
         line_follower.start(speed, LineFollower::StopMode::Distance, front_cm, distance_cm);
         return;
     }
@@ -167,6 +171,7 @@ static void line_cmd(int argc, char** argv) {
             return;
         }
 
+        wall_follower_stop();
         line_follower.start_rfid(speed, uid, any_uid, not_same, front_cm);
         return;
     }
@@ -195,6 +200,7 @@ static void line_cmd(int argc, char** argv) {
         int16_t front_cm = -1;
         if (!parse_speed(argv[3], &speed) || !parse_optional_front(argc, argv, 4, &front_cm)) return;
 
+        wall_follower_stop();
         line_follower.start(speed, mode, front_cm);
         return;
     }
@@ -209,6 +215,7 @@ static void line_cmd(int argc, char** argv) {
     float speed = 0.0f;
     if (!parse_speed(argv[1], &speed)) return;
 
+    wall_follower_stop();
     line_follower.start(speed);
 }
 

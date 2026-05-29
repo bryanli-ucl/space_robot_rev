@@ -3,6 +3,7 @@
 #include "line_follower.hpp"
 #include "logger.hpp"
 #include "motor.hpp"
+#include "wall_follower.hpp"
 
 #include <Arduino.h>
 #include <mbed.h>
@@ -77,6 +78,7 @@ void func_chassis_entry() {
     constexpr float dt_s = CHASSIS_TASK_INTERVAL_MS * 0.001f;
 
     while (true) {
+        wall_follower_update(dt_s);
         line_follower_update(dt_s);
         chassis.update(dt_s);
         ThisThread::sleep_for(std::chrono::milliseconds(CHASSIS_TASK_INTERVAL_MS));

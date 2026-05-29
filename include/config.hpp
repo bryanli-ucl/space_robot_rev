@@ -66,6 +66,10 @@ constexpr float MOTOR_INTEGRAL_LIMIT        = 1000.0f;
 constexpr uint32_t CHASSIS_TASK_INTERVAL_MS = 20;
 constexpr float CHASSIS_MAX_WHEEL_SPEED     = 600.0f;
 
+constexpr float WHEEL_DIAMETER_CM              = 6.0f;
+constexpr float CHASSIS_ENCODER_COUNTS_PER_REV = 224.0f;
+constexpr float CHASSIS_ENCODER_COUNTS_PER_CM  = CHASSIS_ENCODER_COUNTS_PER_REV / (3.1415926f * WHEEL_DIAMETER_CM);
+
 // Turn Controller
 constexpr float TURN_DIRECTION       = -1.0f;
 constexpr float TURN_KP              = 5.0f;
@@ -79,22 +83,31 @@ constexpr uint8_t TURN_CONFIRM_COUNT = 5;
 constexpr uint32_t TURN_TIMEOUT_MS   = 8000;
 
 // Line Follower
-constexpr uint16_t LINE_CENTER_POS          = 4000;
-constexpr uint16_t LINE_BLACK_THRESHOLD     = 700;
-constexpr uint8_t LINE_NO_LINE_MAX_BLACK    = 0;
-constexpr uint8_t LINE_NO_LINE_CONFIRM      = 15;
-constexpr uint8_t LINE_CROSS_CONFIRM        = 2;
-constexpr uint8_t LINE_CORNER_CONFIRM       = 3;
+constexpr uint16_t LINE_CENTER_POS           = 4000;
+constexpr uint16_t LINE_BLACK_THRESHOLD      = 700;
+constexpr uint8_t LINE_NO_LINE_MAX_BLACK     = 0;
+constexpr uint8_t LINE_NO_LINE_CONFIRM       = 15;
+constexpr uint8_t LINE_CROSS_CONFIRM         = 2;
+constexpr uint8_t LINE_CORNER_CONFIRM        = 3;
 constexpr int16_t LINE_DEFAULT_FRONT_STOP_CM = 12;
-constexpr float LINE_WHEEL_DIAMETER_CM      = 6.0f;
-constexpr float LINE_ENCODER_COUNTS_PER_REV = 224.0f;
-constexpr float LINE_ENCODER_COUNTS_PER_CM  = LINE_ENCODER_COUNTS_PER_REV / (3.1415926f * LINE_WHEEL_DIAMETER_CM);
-constexpr float LINE_DIRECTION              = 1.0f;
-constexpr float LINE_KP                     = 0.220f;
-constexpr float LINE_KD                     = 0.180f;
-constexpr float LINE_MAX_WHEEL_SPEED        = 560.0f;
-constexpr float LINE_MIN_SPEED_SCALE        = 0.30f;
-constexpr uint32_t LINE_STATUS_INTERVAL_MS  = 500;
+constexpr float LINE_DIRECTION               = 1.0f;
+constexpr float LINE_KP                      = 0.220f;
+constexpr float LINE_KD                      = 0.180f;
+constexpr float LINE_MAX_WHEEL_SPEED         = 560.0f;
+constexpr float LINE_MIN_SPEED_SCALE         = 0.30f;
+constexpr uint32_t LINE_STATUS_INTERVAL_MS   = 500;
+
+// Wall Follower
+constexpr int16_t WALL_DEFAULT_TARGET_CM     = -1;
+constexpr int16_t WALL_FRONT_STOP_CM         = 12;
+constexpr float WALL_DIST_TO_YAW_KP          = 0.25f;
+constexpr float WALL_MAX_YAW_OFFSET_DEG      = 15.0f;
+constexpr float WALL_YAW_KP                  = 10.0f;
+constexpr float WALL_MAX_WHEEL_SPEED         = 220.0f;
+constexpr float WALL_LEFT_DIRECTION          = -1.0f;
+constexpr float WALL_RIGHT_DIRECTION         = 1.0f;
+constexpr uint8_t WALL_LOST_CONFIRM          = 50;
+constexpr uint32_t WALL_STATUS_INTERVAL_MS   = 500;
 
 // ================================ Sensors =================================
 
@@ -109,6 +122,8 @@ constexpr uint16_t ULTRASONIC_MAX_DISTANCE_CM    = 250;
 constexpr uint32_t ULTRASONIC_TIMEOUT_US         = 15000;
 constexpr uint32_t ULTRASONIC_SAMPLE_INTERVAL_MS = 60;
 constexpr float ULTRASONIC_LOW_PASS_ALPHA        = 0.75f;
+constexpr uint8_t ULTRASONIC_INVALID_HOLD_COUNT  = 5;
+constexpr float ULTRASONIC_MAX_VALID_JUMP_CM     = 35.0f;
 
 // IR Sensors
 constexpr pin_size_t IR_CTRL_O_PIN                     = D18;

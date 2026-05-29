@@ -40,6 +40,9 @@ class Sensors {
     float front_filtered_cm = -1.0f;
     float left_filtered_cm = -1.0f;
     float right_filtered_cm = -1.0f;
+    uint8_t front_invalid_count = 0;
+    uint8_t left_invalid_count = 0;
+    uint8_t right_invalid_count = 0;
     uint32_t ultrasonic_duration_ms = 0;
     uint32_t last_ultrasonic_sample_ms = 0;
     uint8_t ultrasonic_index = 0;
