@@ -1,8 +1,11 @@
 #include "chassis.hpp"
 #include "line_follower.hpp"
 #include "logger.hpp"
+#include "mission.hpp"
 #include "shell.hpp"
 #include "state.hpp"
+#include "task_controller.hpp"
+#include "wall_follower.hpp"
 
 static void start_cmd(int argc, char** argv) {
     (void)argc;
@@ -16,6 +19,9 @@ static void stop_cmd(int argc, char** argv) {
     (void)argc;
     (void)argv;
 
+    mission_stop();
+    task_controller_stop();
+    wall_follower_stop();
     line_follower_stop();
     chassis_stop();
     set_running_state(RunningState::STOPPED);

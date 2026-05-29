@@ -25,6 +25,15 @@ Rfid& Rfid::instance() {
     return instance;
 }
 
+bool Rfid::uid_is_valid() const {
+    if (uid == 0 || seen_ms == 0) return false;
+    return millis() - seen_ms <= RFID_VALID_MS;
+}
+
+uint32_t Rfid::last_uid() const {
+    return uid_is_valid() ? uid : 0;
+}
+
 void Rfid::begin() {
     Wire.begin();
     rfid_reader.PCD_Init();

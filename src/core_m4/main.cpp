@@ -2,6 +2,7 @@
 #include "config.hpp"
 #include "imu.hpp"
 #include "logger.hpp"
+#include "mission.hpp"
 #include "motor.hpp"
 #include "rfid.hpp"
 #include "rpc_bridge.hpp"
@@ -19,6 +20,7 @@ Thread task_logger;
 Thread task_chassis;
 Thread task_sensors;
 Thread task_imu;
+Thread task_mission;
 
 void setup() {
 
@@ -50,6 +52,7 @@ void setup() {
     task_chassis.start(func_chassis_entry);
     task_sensors.start(func_sensors_entry);
     task_imu.start(func_imu_entry);
+    task_mission.start(func_mission_entry);
 }
 
 void loop() {

@@ -60,9 +60,11 @@ static void print_imu() {
 }
 
 static void print_rfid() {
-    loggf("rfid ready=%d uid=%lu size=%u age=%lums dt=%lums watch=%d\n",
+    loggf("rfid ready=%d valid=%d uid=%lu cached=%lu size=%u age=%lums dt=%lums watch=%d\n",
           rfid.is_ready() ? 1 : 0,
+          rfid.uid_is_valid() ? 1 : 0,
           static_cast<unsigned long>(rfid.last_uid()),
+          static_cast<unsigned long>(rfid.cached_uid()),
           rfid.last_uid_size(),
           rfid.last_seen_ms() == 0 ? 0UL : static_cast<unsigned long>(millis() - rfid.last_seen_ms()),
           static_cast<unsigned long>(rfid.last_duration_ms()),

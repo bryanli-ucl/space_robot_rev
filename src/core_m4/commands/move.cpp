@@ -1,9 +1,11 @@
 #include "chassis.hpp"
 #include "line_follower.hpp"
 #include "logger.hpp"
+#include "mission.hpp"
 #include "motor.hpp"
 #include "shell.hpp"
 #include "state.hpp"
+#include "task_controller.hpp"
 #include "wall_follower.hpp"
 
 #include <mbed.h>
@@ -65,6 +67,8 @@ static void move_cmd(int argc, char** argv) {
     }
 
     if (argc == 2 && strcmp(argv[1], "stop") == 0) {
+        mission_stop();
+        task_controller_stop();
         wall_follower_stop();
         line_follower_stop();
         chassis_stop();
@@ -96,6 +100,8 @@ static void move_cmd(int argc, char** argv) {
         return;
     }
 
+    mission_stop();
+    task_controller_stop();
     wall_follower_stop();
     line_follower_stop();
     chassis.set_target(vx, vy, w);

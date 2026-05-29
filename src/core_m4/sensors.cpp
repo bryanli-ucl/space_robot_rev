@@ -52,8 +52,6 @@ static int16_t low_pass_ultrasonic_cm(int16_t raw_cm, float& filtered_cm, uint8_
 
     if (filtered_cm < 0.0f) {
         filtered_cm = static_cast<float>(raw_cm);
-    } else if (fabsf(static_cast<float>(raw_cm) - filtered_cm) > ULTRASONIC_MAX_VALID_JUMP_CM) {
-        return static_cast<int16_t>(filtered_cm + 0.5f);
     } else {
         filtered_cm += ULTRASONIC_LOW_PASS_ALPHA * (static_cast<float>(raw_cm) - filtered_cm);
     }

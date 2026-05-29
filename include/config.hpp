@@ -25,6 +25,7 @@ constexpr uint32_t WIRELESS_TELEMETRY_INTERVAL_MS = 1000;
 constexpr uint8_t RFID_I2C_ADDR            = 0x28;
 constexpr uint32_t RFID_SAMPLE_INTERVAL_MS = 100;
 constexpr uint32_t RFID_REPEAT_COOLDOWN_MS = 200;
+constexpr uint32_t RFID_VALID_MS           = 1000;
 
 // ================================ Motors ==================================
 constexpr pin_size_t MOTOR_RL_EN       = D2;
@@ -91,7 +92,7 @@ constexpr uint8_t LINE_CROSS_CONFIRM         = 2;
 constexpr uint8_t LINE_CORNER_CONFIRM        = 3;
 constexpr int16_t LINE_DEFAULT_FRONT_STOP_CM = 12;
 constexpr float LINE_DIRECTION               = 1.0f;
-constexpr float LINE_KP                      = 0.220f;
+constexpr float LINE_KP                      = 0.330f;
 constexpr float LINE_KD                      = 0.180f;
 constexpr float LINE_MAX_WHEEL_SPEED         = 560.0f;
 constexpr float LINE_MIN_SPEED_SCALE         = 0.30f;
@@ -109,6 +110,32 @@ constexpr float WALL_RIGHT_DIRECTION         = 1.0f;
 constexpr uint8_t WALL_LOST_CONFIRM          = 50;
 constexpr uint32_t WALL_STATUS_INTERVAL_MS   = 500;
 
+// Trial Task Defaults
+constexpr float TASK_LINE_SPEED              = 150.0f;
+constexpr float TASK_DRIVE_SPEED             = 140.0f;
+constexpr float TASK_RAMP_SPEED              = 180.0f;
+constexpr float TASK_WALL_SPEED              = 100.0f;
+constexpr float TASK_REVIVE_SPEED            = 70.0f;
+constexpr float TASK_OPEN_FIELD_DISTANCE_CM  = 125.0f;
+constexpr float TASK_RAMP_DISTANCE_CM        = 120.0f;
+constexpr float TASK_REVIVE_MAX_DISTANCE_CM  = 80.0f;
+constexpr int16_t TASK_OBSTACLE_FRONT_CM     = 18;
+constexpr int16_t TASK_REVIVE_FRONT_CM       = 7;
+constexpr float TASK2_CENTER_DRIVE_CM        = 10.0f;
+constexpr float TASK2_LEFT_TURN_DEG          = -90.0f;
+constexpr float TASK2_RIGHT_TURN_DEG         = 90.0f;
+constexpr int16_t TASK2_DOOR_FRONT_CM        = 10;
+constexpr uint32_t TASK2_RFID_WAIT_MS        = 2000;
+constexpr float MISSION_TURN_IMU_RATIO       = 0.50f;
+constexpr float MISSION_LINE_SEARCH_W        = 300.0f;
+constexpr uint32_t MISSION_LINE_SEARCH_IGNORE_MS = 300;
+constexpr uint32_t MISSION_LINE_SEARCH_TIMEOUT_MS = 5000;
+constexpr uint8_t MISSION_LINE_SEARCH_BLACK_COUNT = 2;
+constexpr uint8_t MISSION_LINE_SEARCH_CONFIRM = 3;
+constexpr uint32_t MISSION_LINE_TIMEOUT_MS   = 20000;
+constexpr uint32_t MISSION_DRIVE_TIMEOUT_MS  = 8000;
+constexpr uint32_t MISSION_TURN_TIMEOUT_MS   = 8000;
+
 // ================================ Sensors =================================
 
 // Ultrasonic
@@ -120,10 +147,9 @@ constexpr pin_size_t ULTRASONIC_RIGHT_TRIG_PIN   = D9;
 constexpr pin_size_t ULTRASONIC_RIGHT_ECHO_PIN   = D8;
 constexpr uint16_t ULTRASONIC_MAX_DISTANCE_CM    = 250;
 constexpr uint32_t ULTRASONIC_TIMEOUT_US         = 15000;
-constexpr uint32_t ULTRASONIC_SAMPLE_INTERVAL_MS = 60;
+constexpr uint32_t ULTRASONIC_SAMPLE_INTERVAL_MS = 150;
 constexpr float ULTRASONIC_LOW_PASS_ALPHA        = 0.75f;
 constexpr uint8_t ULTRASONIC_INVALID_HOLD_COUNT  = 5;
-constexpr float ULTRASONIC_MAX_VALID_JUMP_CM     = 35.0f;
 
 // IR Sensors
 constexpr pin_size_t IR_CTRL_O_PIN                     = D18;
