@@ -54,11 +54,6 @@ static void set_phase(const char* phase) {
     loggf("mission phase=%s\n", mission_phase);
 }
 
-static void set_phase_node(uint8_t index) {
-    snprintf(mission_phase, sizeof(mission_phase), "grid_node_%u", index);
-    loggf("mission phase=%s\n", mission_phase);
-}
-
 static void set_phase_cross(const char* prefix, uint8_t index) {
     if (prefix == nullptr) prefix = "cross";
     snprintf(mission_phase, sizeof(mission_phase), "%s_%u", prefix, index);
@@ -335,43 +330,6 @@ static bool run_exit_base() {
     return true;
 }
 
-static bool follow_rfid_node(uint8_t index) {
-    set_phase_node(index);
-
-    line_follower.start_rfid(TASK_LINE_SPEED, 0, true, true, LINE_DEFAULT_FRONT_STOP_CM);
-    if (!wait_line_done(MISSION_LINE_TIMEOUT_MS)) return false;
-
-    set_phase("grid_node_wait");
-    return wait_blocking(TASK3_RFID_WAIT_MS);
-}
-
-static bool follow_rfid_nodes(uint8_t count, uint8_t& node_index) {
-    for (uint8_t i = 0; i < count; i++) {
-        node_index++;
-        if (!follow_rfid_node(node_index)) return false;
-    }
-
-    return true;
-}
-
-static bool run_solid_grid() {
-    uint8_t node_index = 0;
-
-    if (!follow_rfid_nodes(TASK3_FIRST_STRAIGHT_NODES, node_index)) return false;
-
-    set_phase("grid_turn_right");
-    if (!turn_imu_then_line_blocking(TASK2_RIGHT_TURN_DEG)) return false;
-
-    if (!follow_rfid_nodes(TASK3_MIDDLE_STRAIGHT_NODES, node_index)) return false;
-
-    set_phase("grid_turn_left");
-    if (!turn_imu_then_line_blocking(TASK2_LEFT_TURN_DEG)) return false;
-
-    if (!follow_rfid_nodes(TASK3_LAST_STRAIGHT_NODES, node_index)) return false;
-
-    return true;
-}
-
 static bool follow_cross_node(const char* phase_prefix, uint8_t index, bool clear_after) {
     set_phase_cross(phase_prefix, index);
     line_follower.start(TASK_LINE_SPEED, LineFollower::StopMode::Cross, -1);
@@ -392,6 +350,20 @@ static bool follow_cross_nodes(const char* phase_prefix, uint8_t count, bool cle
     }
 
     return true;
+}
+
+static bool run_solid_grid() {
+    if (!follow_cross_nodes("grid_first", TASK3_FIRST_STRAIGHT_NODES, true)) return false;
+
+    set_phase("grid_turn_right");
+    if (!turn_imu_then_line_blocking(TASK2_RIGHT_TURN_DEG)) return false;
+
+    if (!follow_cross_nodes("grid_middle", TASK3_MIDDLE_STRAIGHT_NODES, true)) return false;
+
+    set_phase("grid_turn_left");
+    if (!turn_imu_then_line_blocking(TASK2_LEFT_TURN_DEG)) return false;
+
+    return follow_cross_nodes("grid_last", TASK3_LAST_STRAIGHT_NODES, false);
 }
 
 static bool find_obstacle_at_cross() {
