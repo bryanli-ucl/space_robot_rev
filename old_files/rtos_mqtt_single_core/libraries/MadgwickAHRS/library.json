@@ -1,7 +1,0 @@
-{
-  "name": "Madgwick",
-  "version": "1.2.0",
-  "build": {
-    "flags": "-w"
-  }
-}
