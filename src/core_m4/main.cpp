@@ -8,6 +8,7 @@
 #include "rpc_bridge.hpp"
 #include "sensors.hpp"
 #include "shell.hpp"
+#include "state.hpp"
 
 #include <Arduino.h>
 #include <mbed.h>
@@ -33,6 +34,7 @@ void setup() {
 
     shell.add_input(Serial1, "serial1");
     rpc_bridge_begin();
+    state_outputs_begin();
 
     // ========================== Motor and Chassis Begin =====================
 

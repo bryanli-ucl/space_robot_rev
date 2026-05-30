@@ -73,7 +73,9 @@ static void print_rfid() {
 }
 
 static void print_button() {
-    loggf("revive button=%d pin=D44 active=low\n", sensors.revive_button_pressed() ? 1 : 0);
+    loggf("button revive=%d pin=D44 kill=%d pin=D10 active=low\n",
+          sensors.revive_button_pressed() ? 1 : 0,
+          sensors.kill_switch_pressed() ? 1 : 0);
 }
 
 static void print_all() {

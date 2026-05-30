@@ -3,6 +3,7 @@
 #include "config.hpp"
 #include "logger.hpp"
 #include "rfid.hpp"
+#include "state.hpp"
 
 #include <Arduino.h>
 #include <QTRSensors.h>
@@ -19,7 +20,7 @@ extern void sensor_watch_update();
 static QTRSensors qtr;
 static QTRSensors qtr_side_left;
 static QTRSensors qtr_side_right;
-static uint8_t ir_side_left_pin[1] = { IR_SIDE_LEFT_SENSOR_PIN };
+static uint8_t ir_side_left_pin[1]  = { IR_SIDE_LEFT_SENSOR_PIN };
 static uint8_t ir_side_right_pin[1] = { IR_SIDE_RIGHT_SENSOR_PIN };
 
 static int16_t measure_ultrasonic_cm(pin_size_t trig, pin_size_t echo) {
@@ -99,55 +100,91 @@ void Sensors::begin() {
     pinMode(ULTRASONIC_RIGHT_TRIG_PIN, OUTPUT);
     pinMode(ULTRASONIC_RIGHT_ECHO_PIN, INPUT);
     pinMode(REVIVE_BUTTON_PIN, INPUT_PULLUP);
+    pinMode(KILL_SWITCH_PIN, INPUT_PULLUP);
 
     digitalWrite(ULTRASONIC_FRONT_TRIG_PIN, LOW);
     digitalWrite(ULTRASONIC_LEFT_TRIG_PIN, LOW);
     digitalWrite(ULTRASONIC_RIGHT_TRIG_PIN, LOW);
 
-    loggf("sensors ready ultrasonic ir\n");
+    loggf("sensors ready ultrasonic ir buttons\n");
 }
 
 void Sensors::update_ultrasonic() {
+    static uint32_t last_sample_ms = 0;
+    static uint8_t index           = 0;
+
     const uint32_t now_ms = millis();
-    if (last_ultrasonic_sample_ms != 0 && now_ms - last_ultrasonic_sample_ms < ULTRASONIC_SAMPLE_INTERVAL_MS) return;
-    last_ultrasonic_sample_ms = now_ms;
+    if (last_sample_ms != 0 && now_ms - last_sample_ms < ULTRASONIC_SAMPLE_INTERVAL_MS) return;
+    last_sample_ms = now_ms;
 
     const uint32_t started_ms = millis();
 
-    if (ultrasonic_index == 0) {
+    if (index == 0) {
         front_raw_cm = measure_ultrasonic_cm(ULTRASONIC_FRONT_TRIG_PIN, ULTRASONIC_FRONT_ECHO_PIN);
-        front_cm = low_pass_ultrasonic_cm(front_raw_cm, front_filtered_cm, front_invalid_count);
-    } else if (ultrasonic_index == 1) {
+        front_cm     = low_pass_ultrasonic_cm(front_raw_cm, front_filtered_cm, front_invalid_count);
+    } else if (index == 1) {
         left_raw_cm = measure_ultrasonic_cm(ULTRASONIC_LEFT_TRIG_PIN, ULTRASONIC_LEFT_ECHO_PIN);
-        left_cm = low_pass_ultrasonic_cm(left_raw_cm, left_filtered_cm, left_invalid_count);
+        left_cm     = low_pass_ultrasonic_cm(left_raw_cm, left_filtered_cm, left_invalid_count);
     } else {
         right_raw_cm = measure_ultrasonic_cm(ULTRASONIC_RIGHT_TRIG_PIN, ULTRASONIC_RIGHT_ECHO_PIN);
-        right_cm = low_pass_ultrasonic_cm(right_raw_cm, right_filtered_cm, right_invalid_count);
+        right_cm     = low_pass_ultrasonic_cm(right_raw_cm, right_filtered_cm, right_invalid_count);
     }
 
     ultrasonic_duration_ms = millis() - started_ms;
-    ultrasonic_index = (ultrasonic_index + 1) % 3;
+    index                  = (index + 1) % 3;
 }
 
 void Sensors::update_ir() {
+    static uint32_t last_sample_ms = 0;
+
     const uint32_t now_ms = millis();
-    if (last_ir_sample_ms != 0 && now_ms - last_ir_sample_ms < IR_SAMPLE_INTERVAL_MS) return;
-    last_ir_sample_ms = now_ms;
+    if (last_sample_ms != 0 && now_ms - last_sample_ms < IR_SAMPLE_INTERVAL_MS) return;
+    last_sample_ms = now_ms;
 
     const uint32_t started_ms = millis();
-    ir_pos = qtr.readLineBlack(ir_vals);
+    ir_pos                    = qtr.readLineBlack(ir_vals);
 
-    uint16_t side_left_values[1] = {};
+    uint16_t side_left_values[1]  = {};
     uint16_t side_right_values[1] = {};
     qtr_side_left.read(side_left_values);
     qtr_side_right.read(side_right_values);
 
-    ir_left_value = side_left_values[0];
-    ir_right_value = side_right_values[0];
-    ir_left_detected = ir_left_value >= IR_SIDE_LEFT_BLACK_THRESHOLD;
+    ir_left_value     = side_left_values[0];
+    ir_right_value    = side_right_values[0];
+    ir_left_detected  = ir_left_value >= IR_SIDE_LEFT_BLACK_THRESHOLD;
     ir_right_detected = ir_right_value >= IR_SIDE_RIGHT_BLACK_THRESHOLD;
+    ir_duration_ms    = millis() - started_ms;
+}
+
+void Sensors::update_buttons() {
+
+    static bool kill_switch_handled      = false;
+    static int kill_switch_pressed_count = 0;
+
     revive_button = digitalRead(REVIVE_BUTTON_PIN) == LOW;
-    ir_duration_ms = millis() - started_ms;
+    kill_switch   = digitalRead(KILL_SWITCH_PIN) == LOW;
+
+    if (!kill_switch) {
+        kill_switch_pressed_count = 0;
+        kill_switch_handled       = false;
+        return;
+    }
+
+    if (kill_switch_pressed_count < KILL_SWITCH_CONFIRM_COUNT) {
+        kill_switch_pressed_count++;
+        return;
+    }
+
+    kill_switch_pressed_count = 0;
+
+    if (kill_switch_handled) return;
+    kill_switch_handled = true;
+
+    if (running_state == RunningState::STOPPED) {
+        state_enter_idle("kill switch");
+    } else {
+        state_force_stop("kill switch");
+    }
 }
 
 void sensors_begin() {
@@ -157,8 +194,10 @@ void sensors_begin() {
 void func_sensors_entry() {
     while (true) {
         sensors.update_ir();
+        sensors.update_buttons();
         sensors.update_ultrasonic();
         rfid_update();
+        state_update_outputs();
         sensor_watch_update();
         ThisThread::sleep_for(std::chrono::milliseconds(SENSOR_TASK_INTERVAL_MS));
     }

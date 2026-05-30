@@ -25,11 +25,11 @@ struct MissionRequest {
 };
 
 static Mail<MissionRequest, 4> mission_mail;
-static volatile bool mission_active = false;
+static volatile bool mission_active         = false;
 static volatile bool mission_stop_requested = false;
-static volatile uint8_t mission_task_id = 0;
-static char mission_phase[40] = "idle";
-static uint32_t mission_start_ms = 0;
+static volatile uint8_t mission_task_id     = 0;
+static char mission_phase[40]               = "idle";
+static uint32_t mission_start_ms            = 0;
 
 static float wrap_deg_180(float deg) {
     while (deg > 180.0f) deg -= 360.0f;
@@ -136,7 +136,7 @@ static bool drive_blocking(float speed, float target_cm, int16_t front_stop_cm) 
             return false;
         }
 
-        const float dist_cm = traveled_cm(fl0, fr0, rl0, rr0);
+        const float dist_cm    = traveled_cm(fl0, fr0, rl0, rr0);
         const int16_t front_cm = sensors.ultrasonic_front_cm();
         if (front_stop_cm > 0 && front_cm > 0 && front_cm <= front_stop_cm) {
             chassis_stop();
@@ -170,15 +170,15 @@ static bool turn_blocking(float delta_deg, float max_w, float tolerance_deg, uin
         return false;
     }
 
-    max_w = constrain(fabsf(max_w), TURN_MIN_WHEEL_SPEED, TURN_MAX_WHEEL_SPEED);
+    max_w         = constrain(fabsf(max_w), TURN_MIN_WHEEL_SPEED, TURN_MAX_WHEEL_SPEED);
     tolerance_deg = fmaxf(0.2f, fabsf(tolerance_deg));
 
-    const float start_yaw = imu.yaw_deg();
-    const float target_yaw = wrap_deg_360(start_yaw + delta_deg);
-    float prev_err = wrap_deg_180(target_yaw - start_yaw);
-    uint8_t confirm = 0;
+    const float start_yaw   = imu.yaw_deg();
+    const float target_yaw  = wrap_deg_360(start_yaw + delta_deg);
+    float prev_err          = wrap_deg_180(target_yaw - start_yaw);
+    uint8_t confirm         = 0;
     const uint32_t start_ms = millis();
-    uint32_t last_ms = start_ms;
+    uint32_t last_ms        = start_ms;
 
     loggf("mission turn begin delta=%.2f start=%.2f target=%.2f\n", delta_deg, start_yaw, target_yaw);
 
@@ -189,14 +189,14 @@ static bool turn_blocking(float delta_deg, float max_w, float tolerance_deg, uin
         }
 
         const uint32_t now_ms = millis();
-        const float dt_s = fmaxf(0.001f, static_cast<float>(now_ms - last_ms) * 0.001f);
-        last_ms = now_ms;
+        const float dt_s      = fmaxf(0.001f, static_cast<float>(now_ms - last_ms) * 0.001f);
+        last_ms               = now_ms;
 
-        const float yaw = imu.yaw_deg();
-        const float err = wrap_deg_180(target_yaw - yaw);
+        const float yaw          = imu.yaw_deg();
+        const float err          = wrap_deg_180(target_yaw - yaw);
         const float yaw_rate_dps = -wrap_deg_180(err - prev_err) / dt_s;
-        const float derr = -yaw_rate_dps;
-        prev_err = err;
+        const float derr         = -yaw_rate_dps;
+        prev_err                 = err;
 
         if (fabsf(err) <= tolerance_deg && fabsf(yaw_rate_dps) <= TURN_STOP_SPEED_DPS) {
             confirm++;
@@ -207,11 +207,11 @@ static bool turn_blocking(float delta_deg, float max_w, float tolerance_deg, uin
                 return true;
             }
         } else {
-            confirm = 0;
-            float w = TURN_KP * err + TURN_KD * derr;
-            const float slow_scale = constrain(fabsf(err) / TURN_SLOW_ZONE_DEG, 0.25f, 1.0f);
+            confirm                   = 0;
+            float w                   = TURN_KP * err + TURN_KD * derr;
+            const float slow_scale    = constrain(fabsf(err) / TURN_SLOW_ZONE_DEG, 0.25f, 1.0f);
             const float limited_max_w = fmaxf(TURN_MIN_WHEEL_SPEED, max_w * slow_scale);
-            w = constrain(w, -limited_max_w, limited_max_w);
+            w                         = constrain(w, -limited_max_w, limited_max_w);
             if (fabsf(err) <= tolerance_deg) w = 0.0f;
             if (fabsf(w) > 0.001f && fabsf(w) < TURN_MIN_WHEEL_SPEED) w = w >= 0.0f ? TURN_MIN_WHEEL_SPEED : -TURN_MIN_WHEEL_SPEED;
             chassis.set_target(0.0f, 0.0f, TURN_DIRECTION * w);
@@ -229,7 +229,7 @@ static bool turn_blocking(float delta_deg, float max_w, float tolerance_deg, uin
 }
 
 static uint8_t count_black_sensors() {
-    uint8_t count = 0;
+    uint8_t count          = 0;
     const uint16_t* values = sensors.ir_values();
     for (uint8_t i = 0; i < IR_SENSOR_COUNT; i++) {
         if (values[i] >= LINE_BLACK_THRESHOLD) count++;
@@ -238,10 +238,10 @@ static uint8_t count_black_sensors() {
 }
 
 static bool turn_to_line_blocking(float direction_deg) {
-    const float direction = direction_deg >= 0.0f ? 1.0f : -1.0f;
-    const float command_w = TURN_DIRECTION * direction * MISSION_LINE_SEARCH_W;
+    const float direction   = direction_deg >= 0.0f ? 1.0f : -1.0f;
+    const float command_w   = TURN_DIRECTION * direction * MISSION_LINE_SEARCH_W;
     const uint32_t start_ms = millis();
-    uint8_t confirm = 0;
+    uint8_t confirm         = 0;
 
     loggf("mission turn-to-line begin direction=%.0f command_w=%.1f\n", direction_deg, command_w);
 
@@ -296,8 +296,8 @@ static bool wait_blocking(uint32_t duration_ms) {
 
 static bool run_standard_line() {
     set_phase("standard_line");
-    line_follower.start(TASK_LINE_SPEED);
-    return wait_line_done(MISSION_LINE_TIMEOUT_MS);
+    line_follower.start(TASK1_LINE_FOLLOW_SPEED);
+    return wait_line_done(TASK1_LINE_FOLLOW_TIMEOUT_MS);
 }
 
 static bool run_open_field() {
@@ -470,8 +470,8 @@ static bool run_revive() {
     int32_t rr0 = 0;
     reset_drive_counts(fl0, fr0, rl0, rr0);
 
-    uint8_t zone = 0;
-    float speed = TASK8_FAST_SPEED;
+    uint8_t zone            = 0;
+    float speed             = TASK8_FAST_SPEED;
     uint32_t last_status_ms = 0;
     const uint32_t start_ms = millis();
     line_follower.start(speed);
@@ -491,9 +491,9 @@ static bool run_revive() {
             return false;
         }
 
-        const float dist_cm = traveled_cm(fl0, fr0, rl0, rr0);
+        const float dist_cm    = traveled_cm(fl0, fr0, rl0, rr0);
         const int16_t front_cm = sensors.ultrasonic_front_cm();
-        const bool touched = sensors.revive_button_pressed();
+        const bool touched     = sensors.revive_button_pressed();
 
         if (touched) {
             line_follower_stop();
@@ -520,24 +520,27 @@ static bool run_revive() {
         }
 
         uint8_t next_zone = zone;
-        float next_speed = speed;
+        float next_speed  = speed;
         if (front_cm > 0 && front_cm <= TASK8_CONTACT_FRONT_CM) {
-            next_zone = 2;
+            next_zone  = 2;
             next_speed = TASK8_CONTACT_SPEED;
         } else if (front_cm > 0 && front_cm <= TASK8_MID_FRONT_CM) {
-            next_zone = 1;
+            next_zone  = 1;
             next_speed = TASK8_MID_SPEED;
         } else if (front_cm > TASK8_MID_FRONT_CM) {
-            next_zone = 0;
+            next_zone  = 0;
             next_speed = TASK8_FAST_SPEED;
         }
 
         if (next_zone != zone || fabsf(next_speed - speed) > 0.1f) {
-            zone = next_zone;
+            zone  = next_zone;
             speed = next_speed;
-            if (zone == 0) set_phase("revive_fast");
-            else if (zone == 1) set_phase("revive_mid");
-            else set_phase("revive_touch");
+            if (zone == 0)
+                set_phase("revive_fast");
+            else if (zone == 1)
+                set_phase("revive_mid");
+            else
+                set_phase("revive_touch");
             line_follower.set_speed(speed);
         }
 
@@ -563,10 +566,10 @@ static bool run_revive() {
 }
 
 static void run_task(uint8_t task_id) {
-    mission_active = true;
+    mission_active         = true;
     mission_stop_requested = false;
-    mission_task_id = task_id;
-    mission_start_ms = millis();
+    mission_task_id        = task_id;
+    mission_start_ms       = millis();
     set_phase("start");
     stop_actions();
 
@@ -600,7 +603,7 @@ static void run_task(uint8_t task_id) {
     mission_phase,
     static_cast<unsigned long>(millis() - mission_start_ms));
 
-    mission_active = false;
+    mission_active  = false;
     mission_task_id = 0;
     set_phase("idle");
 }

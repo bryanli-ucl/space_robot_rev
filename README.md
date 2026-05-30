@@ -25,6 +25,8 @@ Arduino GIGA R1 based robot software for the Term 3 Robotics Challenge. The curr
   - MFRC522 I2C RFID reader.
   - ICM-20948 IMU for yaw-assisted turns.
   - Revive contact button on `D44`, active low.
+  - Hardware kill switch on `D10`, active low.
+  - State LEDs: red on `D17`, green on `D16`.
 
 ## Software Overview
 
@@ -150,6 +152,15 @@ This reduces overshoot and helps re-align to the physical track.
 Mission flows run in a permanent M4 mission thread. Shell command `task <id>` queues a mission request; the mission thread then runs a blocking task function. `stop` and `task stop` have priority and force line follower, wall follower and chassis outputs to stop.
 
 Implemented in `src/core_m4/mission.cpp`.
+
+### Safety And State LEDs
+
+The robot has both software and hardware stop paths:
+
+- `stop` or `task stop` from the shell stops mission, line follower, wall follower and chassis output.
+- The hardware kill switch on `D10` is checked in the sensor thread. Each debounced press toggles between `STOPPED` and `IDLE`.
+- In `STOPPED`, the red LED on `D17` blinks every 500 ms.
+- When the revive/contact button is pressed, the green LED on `D16` turns on and the red LED turns off.
 
 ## Implemented Tasks
 
