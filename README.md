@@ -4,13 +4,13 @@ Arduino GIGA R1 based robot software for the Term 3 Robotics Challenge. The curr
 
 ## Repository Structure
 
-| Path                                     | Purpose                                                                                                                    |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `src/core_m4/`                           | Main robot control: shell, logger, motors, chassis, sensors, IMU, RFID, line following, wall following, and mission flows. |
-| `src/core_m7/`                           | WiFi control bridge. It forwards shell commands to M4 via RPC and streams logs back to the PC.                             |
-| `include/`                               | Shared headers and all main calibration constants in `config.hpp`.                                                         |
-| `libraries/`                             | Local libraries, including the QTR sensor library used by the IR line array.                                               |
-| `docs/`                                  | Datasheets, checklist PDFs, API notes, diagrams, and testing evidence.                                                     |
+| Path           | Purpose                                                                                                                    |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `src/core_m4/` | Main robot control: shell, logger, motors, chassis, sensors, IMU, RFID, line following, wall following, and mission flows. |
+| `src/core_m7/` | WiFi control bridge. It forwards shell commands to M4 via RPC and streams logs back to the PC.                             |
+| `include/`     | Shared headers and all main calibration constants in `config.hpp`.                                                         |
+| `libraries/`   | Local libraries, including the QTR sensor library used by the IR line array.                                               |
+| `docs/`        | Datasheets, checklist PDFs, API notes, diagrams, and testing evidence.                                                     |
 
 ## Hardware Summary
 
@@ -194,34 +194,9 @@ line status
 
 Testing notes and screenshot index are in `docs/testing.md`.
 
-Recommended evidence layout:
-
-```text
-docs/test_evidence/
-  shell_common_command_test.png
-  task_1_linefollow_test.png
-  task_2_test_1.png
-  task_2_test_2.png
-  task_3_test1.png
-  task_3_test2.png
-  task_7_test1.png
-  task_7_test2.png
-```
-
-Terminal screenshots are acceptable evidence. Each screenshot should show the command and the success log, for example `mission done task=2`, `line rfid stop`, `turn done`, or `mission revive contact`.
-
 ## Known Limitations
 
 - Some ultrasonic modules were unreliable during testing. The front ultrasonic sensor was good enough for obstacle/front-stop behaviours, while left/right wall following was less reliable.
 - The mecanum rollers had mechanical issues, so motion is treated like a normal four-wheel chassis rather than relying on sideways movement.
 - Task 4-6 are less polished than Task 1/2/3/7/8.
 - WiFi control uses RPC strings on M7; long-term soak testing should watch for memory issues, although current M4 control build is stable and compiles successfully.
-
-## Current Build Check
-
-Last checked locally:
-
-```text
-pio run -e giga_r1_m4
-SUCCESS
-```
