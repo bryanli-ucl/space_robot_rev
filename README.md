@@ -55,6 +55,22 @@ flowchart LR
 
 Main thread startup is in `src/core_m4/main.cpp`: it starts logger, shell, chassis, sensors, IMU and mission threads. The M4 `loop()` stays idle after setup.
 
+### Key Source Files
+
+| File | Responsibility |
+| ---- | -------------- |
+| `src/core_m4/main.cpp` | M4 startup and RTOS thread creation. |
+| `src/core_m4/mission.cpp` | High-level blocking mission flows for `task 1` to `task 8`. |
+| `src/core_m4/line_follower.cpp` | PID line tracking and line stop conditions: cross, corner, front stop, distance, RFID and lost-line detection. |
+| `src/core_m4/chassis.cpp` | Chassis velocity target handling, encoder distance support and stop output. |
+| `src/core_m4/motor.cpp` | Per-wheel encoder feedback, velocity PID, PWM compensation and motor commands. |
+| `src/core_m4/sensors.cpp` | IR array, side IR, ultrasonic sensors, kill switch and revive/contact button. |
+| `src/core_m4/imu.cpp` | IMU sampling, yaw estimation and gyro/magnetometer calibration. |
+| `src/core_m4/rfid.cpp` | MFRC522 RFID reader polling and UID caching. |
+| `src/core_m4/wall_follower.cpp` | Wall-following controller using side ultrasonic and IMU heading assist. |
+| `src/core_m4/commands/` | Shell command handlers for manual testing and mission control. |
+| `src/core_m7/main.cpp` | WiFi shell bridge and M4 RPC/log forwarding. |
+
 ## Build and Upload
 
 Install PlatformIO, then build:
@@ -164,16 +180,16 @@ The robot has both software and hardware stop paths:
 
 ## Implemented Tasks
 
-| Task   | Status         | Implementation                                                                           |
-| ------ | -------------- | ---------------------------------------------------------------------------------------- |
-| Task 1 | Tested working | Basic line following.                                                                    |
-| Task 2 | Tested working | Exit/intersection flow: cross, corners, RFID wait, wall/front stop.                      |
-| Task 3 | Tested working | Solid-grid cross navigation.                                                             |
-| Task 4 | Basic support  | Open-field drive mission using encoder distance.                                         |
-| Task 5 | Basic support  | Ramp drive mission using encoder distance and front stop.                                |
-| Task 6 | Partial        | Wall-follow mission exists but is limited by ultrasonic reliability and wheel mechanics. |
-| Task 7 | Tested working | Obstacle detection at cross, obstacle bypass, return to line.                            |
-| Task 8 | Tested working | Revive approach: line follow, speed zones by front distance, stop on D44 contact button. |
+| Task   | Status                       | Implementation                                                                           |
+| ------ | ---------------------------- | ---------------------------------------------------------------------------------------- |
+| Task 1 | Tested working               | Basic line following.                                                                    |
+| Task 2 | Tested working               | Exit/intersection flow: cross, corners, RFID wait, wall/front stop.                      |
+| Task 3 | Tested working               | Solid-grid cross navigation.                                                             |
+| Task 4 | Implemented with limitations | Open-field drive mission using encoder distance.                                         |
+| Task 5 | Implemented with limitations | Ramp drive mission using encoder distance and front stop.                                |
+| Task 6 | Implemented with limitations | Wall-follow mission exists but is limited by ultrasonic reliability and wheel mechanics. |
+| Task 7 | Tested working               | Obstacle detection at cross, obstacle bypass, return to line.                            |
+| Task 8 | Tested working               | Revive approach: line follow, speed zones by front distance, stop on D44 contact button. |
 
 All `task <1..8>` commands are routed through the M4 mission thread. Task 1/4/5/6 are simpler mission flows; Task 2/3/7/8 are the main tested mission flows.
 
@@ -209,5 +225,5 @@ Testing notes and screenshot index are in `docs/testing.md`.
 
 - Some ultrasonic modules were unreliable during testing. The front ultrasonic sensor was good enough for obstacle/front-stop behaviours, while left/right wall following was less reliable.
 - The mecanum rollers had mechanical issues, so motion is treated like a normal four-wheel chassis rather than relying on sideways movement.
-- Task 4-6 are less polished than Task 1/2/3/7/8.
+- Task 4-6 are implemented but have less physical test coverage than Task 1/2/3/7/8.
 - WiFi control uses RPC strings on M7; long-term soak testing should watch for memory issues, although current M4 control build is stable and compiles successfully.
