@@ -14,28 +14,28 @@ static WiFiClient debug_client;
 
 static void log_local(const char* text) {
     if (text == nullptr) return;
-    Serial.print(text);
+    Serial4.print(text);
     if (debug_client && debug_client.connected()) debug_client.print(text);
 }
 
 static bool connect_wifi() {
     static uint32_t last_wifi_attempt_ms = 0;
-    static bool wifi_connected_printed = false;
-    static bool debug_server_started = false;
+    static bool wifi_connected_printed   = false;
+    static bool debug_server_started     = false;
 
     const uint32_t now_ms = millis();
     if (WiFi.status() == WL_CONNECTED) {
         if (!wifi_connected_printed) {
             wifi_connected_printed = true;
-            Serial.print("wifi connected ip=");
-            Serial.println(WiFi.localIP());
+            Serial4.print("wifi connected ip=");
+            Serial4.println(WiFi.localIP());
         }
 
         if (!debug_server_started) {
             debug_server.begin();
             debug_server_started = true;
-            Serial.print("wireless debug listening port=");
-            Serial.println(WIRELESS_DEBUG_PORT);
+            Serial4.print("wireless debug listening port=");
+            Serial4.println(WIRELESS_DEBUG_PORT);
         }
         return true;
     }
@@ -45,8 +45,8 @@ static bool connect_wifi() {
     if (last_wifi_attempt_ms != 0 && now_ms - last_wifi_attempt_ms < WIFI_CONNECT_RETRY_MS) return false;
 
     last_wifi_attempt_ms = now_ms;
-    Serial.print("wifi begin ssid=");
-    Serial.println(WIFI_SSID);
+    Serial4.print("wifi begin ssid=");
+    Serial4.println(WIFI_SSID);
     WiFi.disconnect();
     WiFi.begin(WIFI_SSID, WIFI_PASS);
     return false;
@@ -61,7 +61,7 @@ static void accept_client() {
     debug_client = next_client;
     debug_client.print("space-robot wireless shell ready\r\n");
     debug_client.print("send M4 shell commands, one per line\r\n> ");
-    Serial.println("wireless client connected");
+    Serial4.println("wireless client connected");
 }
 
 static void execute_line(const char* line) {
@@ -120,10 +120,10 @@ static void poll_m4_logs() {
 }
 
 void setup() {
-    Serial.begin(SERIAL_BAUD);
+    Serial4.begin(SERIAL_BAUD);
     delay(200);
 
-    Serial.println("m7 wireless debug starting");
+    Serial4.println("m7 wireless debug starting");
     RPC.begin();
     connect_wifi();
 }

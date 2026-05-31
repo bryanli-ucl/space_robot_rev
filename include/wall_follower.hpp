@@ -34,8 +34,9 @@ class WallFollower {
     int16_t front_cm = -1;
     float wall_error = 0.0f;
     float yaw_start = 0.0f;
-    float yaw_target = 0.0f;
     float yaw_error = 0.0f;
+    float yaw_term = 0.0f;
+    float distance_term = 0.0f;
     float w = 0.0f;
     uint8_t lost_count = 0;
     int32_t start_fl_count = 0;

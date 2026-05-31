@@ -38,8 +38,9 @@ void WallFollower::start(Side next_side, float next_speed, float next_target_dis
     front_cm             = -1;
     wall_error           = 0.0f;
     yaw_start            = imu.yaw_deg();
-    yaw_target           = yaw_start;
     yaw_error            = 0.0f;
+    yaw_term             = 0.0f;
+    distance_term        = 0.0f;
     w                    = 0.0f;
     lost_count           = 0;
     start_fl_count       = motor_fl().count();
@@ -66,8 +67,9 @@ void WallFollower::stop() {
     wall_cm              = -1;
     front_cm             = -1;
     wall_error           = 0.0f;
-    yaw_target           = yaw_start;
     yaw_error            = 0.0f;
+    yaw_term             = 0.0f;
+    distance_term        = 0.0f;
     w                    = 0.0f;
     lost_count           = 0;
     chassis_stop();
@@ -133,13 +135,10 @@ void WallFollower::update(float dt_s) {
         wall_error = static_cast<float>(wall_cm - target_wall_cm);
     }
 
-    const float yaw_offset = constrain(side_direction * WALL_DIST_TO_YAW_KP * wall_error,
-    -WALL_MAX_YAW_OFFSET_DEG,
-    WALL_MAX_YAW_OFFSET_DEG);
-    yaw_target = wrap_deg_180(yaw_start + yaw_offset);
-    yaw_error  = wrap_deg_180(yaw_target - imu.yaw_deg());
-    w         = TURN_DIRECTION * WALL_YAW_KP * yaw_error;
-    w         = constrain(w, -WALL_MAX_WHEEL_SPEED, WALL_MAX_WHEEL_SPEED);
+    yaw_error     = wrap_deg_180(yaw_start - imu.yaw_deg());
+    yaw_term      = TURN_DIRECTION * WALL_YAW_KP * yaw_error;
+    distance_term = TURN_DIRECTION * side_direction * WALL_DIST_KP * wall_error;
+    w             = constrain(yaw_term + distance_term, -WALL_MAX_WHEEL_SPEED, WALL_MAX_WHEEL_SPEED);
 
     chassis.set_target(speed, 0.0f, w);
 
@@ -151,7 +150,7 @@ void WallFollower::update(float dt_s) {
 }
 
 void WallFollower::print_status() const {
-    loggf("wall active=%d side=%s speed=%.1f dist=%.1f/%.1f wall=%d/%d err=%.1f yaw=%.2f start=%.2f target=%.2f yawerr=%.2f front=%d lost=%u cross=%d w=%.1f\n",
+    loggf("wall active=%d side=%s speed=%.1f dist=%.1f/%.1f wall=%d/%d err=%.1f yaw=%.2f start=%.2f yawerr=%.2f yterm=%.1f dterm=%.1f front=%d lost=%u cross=%d w=%.1f\n",
     active ? 1 : 0,
     side_name(),
     speed,
@@ -162,8 +161,9 @@ void WallFollower::print_status() const {
     wall_error,
     imu.yaw_deg(),
     yaw_start,
-    yaw_target,
     yaw_error,
+    yaw_term,
+    distance_term,
     front_cm,
     lost_count,
     sensors.ir_side_left_detected() && sensors.ir_side_right_detected() ? 1 : 0,

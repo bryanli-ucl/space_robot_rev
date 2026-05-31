@@ -301,8 +301,25 @@ static bool run_standard_line() {
 }
 
 static bool run_open_field() {
-    set_phase("open_field_drive");
-    return drive_blocking(TASK_DRIVE_SPEED, TASK_OPEN_FIELD_DISTANCE_CM, -1);
+    set_phase("task4_forward_2_nodes");
+    if (!drive_blocking(TASK4_DRIVE_SPEED, TASK4_NODE_CM * 2.0f, -1)) return false;
+    if (!wait_blocking(TASK4_ACTION_SETTLE_MS)) return false;
+
+    set_phase("task4_turn_right");
+    if (!turn_blocking(TASK4_RIGHT_TURN_DEG, TURN_MAX_WHEEL_SPEED, TURN_TOLERANCE_DEG, MISSION_TURN_TIMEOUT_MS)) return false;
+    if (!wait_blocking(TASK4_ACTION_SETTLE_MS)) return false;
+
+    set_phase("task4_forward_1_node");
+    if (!drive_blocking(TASK4_DRIVE_SPEED, TASK4_NODE_CM, -1)) return false;
+    if (!wait_blocking(TASK4_ACTION_SETTLE_MS)) return false;
+
+    set_phase("task4_turn_left");
+    if (!turn_blocking(TASK4_LEFT_TURN_DEG, TURN_MAX_WHEEL_SPEED, TURN_TOLERANCE_DEG, MISSION_TURN_TIMEOUT_MS)) return false;
+    if (!wait_blocking(TASK4_ACTION_SETTLE_MS)) return false;
+
+    set_phase("task4_forward_2_nodes_final");
+    if (!drive_blocking(TASK4_DRIVE_SPEED, TASK4_NODE_CM * 2.0f, -1)) return false;
+    return wait_blocking(TASK4_ACTION_SETTLE_MS);
 }
 
 static bool run_ramp() {
@@ -311,11 +328,16 @@ static bool run_ramp() {
 }
 
 static bool run_wall_task() {
-    int16_t target_cm = sensors.ultrasonic_right_cm();
+    int16_t target_cm = TASK6_WALL_TARGET_CM;
+    if (target_cm <= 0) target_cm = sensors.ultrasonic_left_cm();
     if (target_cm <= 0) target_cm = 20;
 
-    set_phase("wall_follow_right");
-    wall_follower.start(WallFollower::Side::Right, TASK_WALL_SPEED, 100.0f, target_cm);
+    set_phase("wall_follow_left");
+    loggf("mission task6 wall left speed=%.1f dist=%.1f target=%d\n",
+    TASK6_WALL_SPEED,
+    TASK6_WALL_DISTANCE_CM,
+    target_cm);
+    wall_follower.start(WallFollower::Side::Left, TASK6_WALL_SPEED, TASK6_WALL_DISTANCE_CM, target_cm);
     return wait_wall_done(MISSION_LINE_TIMEOUT_MS);
 }
 
@@ -642,6 +664,7 @@ void mission_print_status() {
 }
 
 void func_mission_entry() {
+
     while (true) {
         auto* request = mission_mail.try_get_for(100ms);
         if (request == nullptr) continue;

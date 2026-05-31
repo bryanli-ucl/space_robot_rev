@@ -14,8 +14,11 @@ constexpr int SERIAL_BAUD = 115200;
 // constexpr const char* WIFI_SSID = "PhaseSpaceNetwork_2.4G";
 // constexpr const char* WIFI_PASS = "8igMacNet";
 
-constexpr const char* WIFI_SSID = "BD4B Hyperoptic 1Gb Fibre 2.4Ghz";
-constexpr const char* WIFI_PASS = "3R9gfN4up9ar";
+// constexpr const char* WIFI_SSID = "BD4B Hyperoptic 1Gb Fibre 2.4Ghz";
+// constexpr const char* WIFI_PASS = "3R9gfN4up9ar";
+
+constexpr const char* WIFI_SSID = "李彦伯’s iPhone";
+constexpr const char* WIFI_PASS = "lyb20061127";
 
 // Wifi Config
 constexpr uint16_t WIRELESS_DEBUG_PORT            = 7777;
@@ -106,8 +109,7 @@ constexpr uint32_t LINE_STATUS_INTERVAL_MS   = 500;
 // Wall Follower
 constexpr int16_t WALL_DEFAULT_TARGET_CM   = -1;
 constexpr int16_t WALL_FRONT_STOP_CM       = 12;
-constexpr float WALL_DIST_TO_YAW_KP        = 0.25f;
-constexpr float WALL_MAX_YAW_OFFSET_DEG    = 15.0f;
+constexpr float WALL_DIST_KP               = 3.0f;
 constexpr float WALL_YAW_KP                = 10.0f;
 constexpr float WALL_MAX_WHEEL_SPEED       = 220.0f;
 constexpr float WALL_LEFT_DIRECTION        = -1.0f;
@@ -123,6 +125,9 @@ constexpr float TASK_WALL_SPEED             = 100.0f;
 constexpr float TASK_REVIVE_SPEED           = 70.0f;
 constexpr float TASK_OPEN_FIELD_DISTANCE_CM = 125.0f;
 constexpr float TASK_RAMP_DISTANCE_CM       = 120.0f;
+constexpr float TASK6_WALL_SPEED            = 150.0f;
+constexpr float TASK6_WALL_DISTANCE_CM      = 120.0f;
+constexpr int16_t TASK6_WALL_TARGET_CM      = WALL_DEFAULT_TARGET_CM;
 constexpr float TASK_REVIVE_MAX_DISTANCE_CM = 80.0f;
 constexpr int16_t TASK_OBSTACLE_FRONT_CM    = 18;
 constexpr int16_t TASK_REVIVE_FRONT_CM      = 7;
@@ -130,6 +135,13 @@ constexpr int16_t TASK_REVIVE_FRONT_CM      = 7;
 // Task 1
 constexpr float TASK1_LINE_FOLLOW_SPEED        = 150.0f;
 constexpr int32_t TASK1_LINE_FOLLOW_TIMEOUT_MS = 90 * 1000;
+
+// Task 4
+constexpr float TASK4_NODE_CM        = 30.0f;
+constexpr float TASK4_DRIVE_SPEED    = 150.0f;
+constexpr float TASK4_RIGHT_TURN_DEG = 90.0f;
+constexpr float TASK4_LEFT_TURN_DEG  = -90.0f;
+constexpr uint32_t TASK4_ACTION_SETTLE_MS = 300;
 
 // Task 2
 constexpr float TASK2_CENTER_DRIVE_CM = 10.0f;
