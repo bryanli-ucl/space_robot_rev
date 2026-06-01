@@ -11,14 +11,14 @@ constexpr int SERIAL_BAUD = 115200;
 
 // ============================== Wireless ==================================
 // SSID and Password Setting
-// constexpr const char* WIFI_SSID = "PhaseSpaceNetwork_2.4G";
-// constexpr const char* WIFI_PASS = "8igMacNet";
+constexpr const char* WIFI_SSID = "PhaseSpaceNetwork_2.4G";
+constexpr const char* WIFI_PASS = "8igMacNet";
 
 // constexpr const char* WIFI_SSID = "BD4B Hyperoptic 1Gb Fibre 2.4Ghz";
 // constexpr const char* WIFI_PASS = "3R9gfN4up9ar";
 
-constexpr const char* WIFI_SSID = "李彦伯’s iPhone";
-constexpr const char* WIFI_PASS = "lyb20061127";
+// constexpr const char* WIFI_SSID = "李彦伯’s iPhone";
+// constexpr const char* WIFI_PASS = "lyb20061127";
 
 // Wifi Config
 constexpr uint16_t WIRELESS_DEBUG_PORT            = 7777;
@@ -137,10 +137,10 @@ constexpr float TASK1_LINE_FOLLOW_SPEED        = 150.0f;
 constexpr int32_t TASK1_LINE_FOLLOW_TIMEOUT_MS = 90 * 1000;
 
 // Task 4
-constexpr float TASK4_NODE_CM        = 30.0f;
-constexpr float TASK4_DRIVE_SPEED    = 150.0f;
-constexpr float TASK4_RIGHT_TURN_DEG = 90.0f;
-constexpr float TASK4_LEFT_TURN_DEG  = -90.0f;
+constexpr float TASK4_NODE_CM             = 30.0f;
+constexpr float TASK4_DRIVE_SPEED         = 150.0f;
+constexpr float TASK4_RIGHT_TURN_DEG      = 90.0f;
+constexpr float TASK4_LEFT_TURN_DEG       = -90.0f;
 constexpr uint32_t TASK4_ACTION_SETTLE_MS = 300;
 
 // Task 2

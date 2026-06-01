@@ -1,18 +1,20 @@
-#include "../termthree_navigation/movement.h"
-#include "../termthree_navigation/termthree_navigation.h"
+#include "mission/movement.h"
+#include "mission/termthree_navigation.h"
 
+#include "config.hpp"
 #include "logger.hpp"
 #include "mission.hpp"
+#include "motion_primitives.hpp"
 #include "shell.hpp"
 #include "state.hpp"
 
 #include <stdlib.h>
 #include <string.h>
 
-static bool ensure_robot_started(const char* command)
-{
-    if(running_state != RunningState::STOPPED)
-    {
+static constexpr float NAV_TEST_BACKUP_CM = 6.0f;
+
+static bool ensure_robot_started(const char* command) {
+    if (running_state != RunningState::STOPPED) {
         return true;
     }
 
@@ -20,39 +22,33 @@ static bool ensure_robot_started(const char* command)
     return false;
 }
 
-static void print_nav_status()
-{
+static void print_nav_status() {
     const Robot* robot = termthree_navigation_robot();
 
-    if(robot == nullptr)
-    {
+    if (robot == nullptr) {
         loggf("nav status unavailable\n");
         return;
     }
 
     loggf(
-        "nav enabled=%d pos=%d,%d heading=%d state=%d task=%d target=%d,%d score=%.1f seeds=%d\n",
-        termthree_navigation_enabled() ? 1 : 0,
-        robot->pos.x,
-        robot->pos.y,
-        static_cast<int>(robot->heading),
-        static_cast<int>(robot->state),
-        static_cast<int>(robot->task.type),
-        robot->task.target.x,
-        robot->task.target.y,
-        robot->score,
-        robot->seed_inventory
-    );
+    "nav enabled=%d pos=%d,%d heading=%d state=%d task=%d target=%d,%d score=%.1f seeds=%d\n",
+    termthree_navigation_enabled() ? 1 : 0,
+    robot->pos.x,
+    robot->pos.y,
+    static_cast<int>(robot->heading),
+    static_cast<int>(robot->state),
+    static_cast<int>(robot->task.type),
+    robot->task.target.x,
+    robot->task.target.y,
+    robot->score,
+    robot->seed_inventory);
 }
 
-static bool run_step_token(const char* token)
-{
-    if((token[0] == 'f' || strncmp(token, "forward", 7) == 0) && token[1] != '\0')
-    {
+static bool run_step_token(const char* token) {
+    if ((token[0] == 'f' || strncmp(token, "forward", 7) == 0) && token[1] != '\0') {
         const char* count_text = token[0] == 'f' ? token + 1 : token + 7;
-        int count = atoi(count_text);
-        if(count <= 0)
-        {
+        int count              = atoi(count_text);
+        if (count <= 0) {
             loggf("nav test invalid forward cell count '%s'\n", token);
             return false;
         }
@@ -61,49 +57,47 @@ static bool run_step_token(const char* token)
         return move_forward_rfid_cells(count);
     }
 
-    if(strcmp(token, "f") == 0 || strcmp(token, "forward") == 0)
-    {
+    if (strcmp(token, "f") == 0 || strcmp(token, "forward") == 0) {
         loggf("nav test step forward_rfid cells=1\n");
         return move_forward_rfid_cells(1);
     }
 
-    if(strcmp(token, "b") == 0 || strcmp(token, "back") == 0 || strcmp(token, "backward") == 0)
-    {
+    if (strcmp(token, "b") == 0 || strcmp(token, "back") == 0 || strcmp(token, "backward") == 0) {
         loggf("nav test step backward\n");
         move_backward_one_cell();
         return true;
     }
 
-    if(strcmp(token, "l") == 0 || strcmp(token, "left") == 0)
-    {
+    if (strcmp(token, "x") == 0) {
+        loggf("nav test step backup %.1fcm\n", NAV_TEST_BACKUP_CM);
+        return motion_drive_blocking(-TASK_DRIVE_SPEED * 0.7f, NAV_TEST_BACKUP_CM, -1, MISSION_DRIVE_TIMEOUT_MS);
+    }
+
+    if (strcmp(token, "l") == 0 || strcmp(token, "left") == 0) {
         loggf("nav test step left\n");
         turn_left_90();
         return true;
     }
 
-    if(strcmp(token, "r") == 0 || strcmp(token, "right") == 0)
-    {
+    if (strcmp(token, "r") == 0 || strcmp(token, "right") == 0) {
         loggf("nav test step right\n");
         turn_right_90();
         return true;
     }
 
-    if(strcmp(token, "sl") == 0 || strcmp(token, "strafe_left") == 0)
-    {
+    if (strcmp(token, "sl") == 0 || strcmp(token, "strafe_left") == 0) {
         loggf("nav test step strafe_left\n");
         strafe_left_one_cell();
         return true;
     }
 
-    if(strcmp(token, "sr") == 0 || strcmp(token, "strafe_right") == 0)
-    {
+    if (strcmp(token, "sr") == 0 || strcmp(token, "strafe_right") == 0) {
         loggf("nav test step strafe_right\n");
         strafe_right_one_cell();
         return true;
     }
 
-    if(strcmp(token, "seed") == 0 || strcmp(token, "drop") == 0)
-    {
+    if (strcmp(token, "seed") == 0 || strcmp(token, "drop") == 0) {
         loggf("nav test step drop_seed\n");
         drop_seed();
         return true;
@@ -113,18 +107,14 @@ static bool run_step_token(const char* token)
     return false;
 }
 
-static void nav_cmd(int argc, char** argv)
-{
-    if(argc == 1 || (argc == 2 && strcmp(argv[1], "status") == 0))
-    {
+static void nav_cmd(int argc, char** argv) {
+    if (argc == 1 || (argc == 2 && strcmp(argv[1], "status") == 0)) {
         print_nav_status();
         return;
     }
 
-    if(argc == 2 && strcmp(argv[1], "start") == 0)
-    {
-        if(!ensure_robot_started("nav start"))
-        {
+    if (argc == 2 && strcmp(argv[1], "start") == 0) {
+        if (!ensure_robot_started("nav start")) {
             return;
         }
 
@@ -134,8 +124,7 @@ static void nav_cmd(int argc, char** argv)
         return;
     }
 
-    if(argc == 2 && strcmp(argv[1], "stop") == 0)
-    {
+    if (argc == 2 && strcmp(argv[1], "stop") == 0) {
         termthree_navigation_set_enabled(false);
         movement_stop_all();
         loggf("nav disabled\n");
@@ -143,10 +132,8 @@ static void nav_cmd(int argc, char** argv)
         return;
     }
 
-    if(argc == 2 && strcmp(argv[1], "tick") == 0)
-    {
-        if(!ensure_robot_started("nav tick"))
-        {
+    if (argc == 2 && strcmp(argv[1], "tick") == 0) {
+        if (!ensure_robot_started("nav tick")) {
             return;
         }
 
@@ -155,27 +142,22 @@ static void nav_cmd(int argc, char** argv)
         return;
     }
 
-    if(argc >= 3 && (strcmp(argv[1], "test") == 0 || strcmp(argv[1], "step") == 0))
-    {
-        if(!ensure_robot_started("nav test"))
-        {
+    if (argc >= 3 && (strcmp(argv[1], "test") == 0 || strcmp(argv[1], "step") == 0)) {
+        if (!ensure_robot_started("nav test")) {
             return;
         }
 
         mission_stop();
         termthree_navigation_set_enabled(false);
 
-        for(int i = 2; i < argc; i++)
-        {
-            if(!run_step_token(argv[i]))
-            {
+        for (int i = 2; i < argc; i++) {
+            if (!run_step_token(argv[i])) {
                 movement_stop_all();
-                loggf("usage: nav test <f|f2|f3|b|l|r|sl|sr|seed> [...]\n");
+                loggf("usage: nav test <f|f2|f3|b|x|l|r|sl|sr|seed> [...]\n");
                 return;
             }
 
-            if(running_state == RunningState::STOPPED)
-            {
+            if (running_state == RunningState::STOPPED) {
                 movement_stop_all();
                 loggf("nav test stopped by state\n");
                 return;
@@ -187,16 +169,13 @@ static void nav_cmd(int argc, char** argv)
         return;
     }
 
-    if(argc == 3 && strcmp(argv[1], "rfid") == 0)
-    {
-        if(!ensure_robot_started("nav rfid"))
-        {
+    if (argc == 3 && strcmp(argv[1], "rfid") == 0) {
+        if (!ensure_robot_started("nav rfid")) {
             return;
         }
 
         const int count = atoi(argv[2]);
-        if(count <= 0)
-        {
+        if (count <= 0) {
             loggf("usage: nav rfid <cell_count>\n");
             return;
         }
@@ -204,12 +183,9 @@ static void nav_cmd(int argc, char** argv)
         mission_stop();
         termthree_navigation_set_enabled(false);
 
-        if(move_forward_rfid_cells(count))
-        {
+        if (move_forward_rfid_cells(count)) {
             loggf("nav rfid done cells=%d\n", count);
-        }
-        else
-        {
+        } else {
             movement_stop_all();
             loggf("nav rfid failed cells=%d\n", count);
         }
@@ -217,7 +193,7 @@ static void nav_cmd(int argc, char** argv)
         return;
     }
 
-    loggf("usage: nav status | nav start | nav stop | nav tick | nav rfid <n> | nav test <f|f2|b|l|r|sl|sr|seed> [...]\n");
+    loggf("usage: nav status | nav start | nav stop | nav tick | nav rfid <n> | nav test <f|f2|b|x|l|r|sl|sr|seed> [...]\n");
 }
 
 SHELL_COMMAND("nav", nav_cmd, "term-three navigation and movement tests")

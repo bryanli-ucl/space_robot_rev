@@ -57,22 +57,28 @@ void LineFollower::start(float next_speed, StopMode next_mode, int16_t next_fron
 void LineFollower::start_rfid(float next_speed, uint32_t target_uid, bool any_uid, bool not_same, int16_t next_front_stop_cm) {
     start(next_speed, StopMode::Rfid, next_front_stop_cm);
     rfid_target_uid = target_uid;
-    rfid_ignore_uid = not_same ? rfid.last_uid() : 0;
+    rfid_ignore_uid = not_same ? last_rfid_stop_uid : 0;
     rfid_any_uid    = any_uid;
     rfid_not_same   = not_same;
 
-    loggf("line rfid start speed=%.1f target=%lu any=%d notsame=%d ignore=%lu front=%d ready=%d\n",
+    loggf("line rfid start speed=%.1f target=%lu any=%d notsame=%d ignore=%lu current=%lu front=%d ready=%d\n",
     speed,
     static_cast<unsigned long>(rfid_target_uid),
     rfid_any_uid ? 1 : 0,
     rfid_not_same ? 1 : 0,
     static_cast<unsigned long>(rfid_ignore_uid),
+    static_cast<unsigned long>(rfid.last_uid()),
     front_stop_cm,
     rfid.is_ready() ? 1 : 0);
 }
 
 void LineFollower::set_speed(float next_speed) {
     speed = next_speed;
+}
+
+void LineFollower::set_pid(float kp, float kd) {
+    kp_value = kp;
+    kd_value = kd;
 }
 
 void LineFollower::stop() {
@@ -158,6 +164,7 @@ bool LineFollower::should_stop_for_event() {
     if (mode == StopMode::Rfid) {
         const uint32_t uid = rfid.last_uid();
         if (uid != 0 && uid != rfid_ignore_uid && (rfid_any_uid || rfid_not_same || uid == rfid_target_uid)) {
+            last_rfid_stop_uid = uid;
             loggf("line rfid stop uid=%lu target=%lu ignore=%lu\n",
             static_cast<unsigned long>(uid),
             static_cast<unsigned long>(rfid_target_uid),
@@ -201,7 +208,7 @@ void LineFollower::update(float dt_s) {
         no_line_count = 0;
     }
 
-    if (no_line_count >= LINE_NO_LINE_CONFIRM) {
+    if (mode != StopMode::None && no_line_count >= LINE_NO_LINE_CONFIRM) {
         loggf("line lost pos=%u black=%u\n", sensors.ir_position(), black_count);
         stop();
         return;
@@ -218,7 +225,7 @@ void LineFollower::update(float dt_s) {
 
     const float abs_err_norm = constrain(fabsf(error) / static_cast<float>(LINE_CENTER_POS), 0.0f, 1.0f);
     vx                       = speed * (1.0f - (1.0f - LINE_MIN_SPEED_SCALE) * abs_err_norm);
-    w                        = LINE_DIRECTION * (LINE_KP * error + LINE_KD * derr);
+    w                        = LINE_DIRECTION * (kp_value * error + kd_value * derr);
     w                        = constrain(w, -LINE_MAX_WHEEL_SPEED, LINE_MAX_WHEEL_SPEED);
 
     chassis.set_target(vx, 0.0f, w);
@@ -231,10 +238,12 @@ void LineFollower::update(float dt_s) {
 }
 
 void LineFollower::print_status() const {
-    loggf("line active=%d mode=%s speed=%.1f pos=%u err=%.0f black=%u noln=%u cross=%u corner=%u/%u front=%d/%d dist=%.1f/%.1f rfid=%lu/%lu vx=%.1f w=%.1f\n",
+    loggf("line active=%d mode=%s speed=%.1f pid=%.3f/%.3f pos=%u err=%.0f black=%u noln=%u cross=%u corner=%u/%u front=%d/%d dist=%.1f/%.1f rfid=%lu/%lu last=%lu vx=%.1f w=%.1f\n",
     active ? 1 : 0,
     stop_mode_name(),
     speed,
+    kp_value,
+    kd_value,
     sensors.ir_position(),
     error,
     black_count,
@@ -248,6 +257,7 @@ void LineFollower::print_status() const {
     target_distance_cm,
     static_cast<unsigned long>(rfid.last_uid()),
     static_cast<unsigned long>(rfid_ignore_uid),
+    static_cast<unsigned long>(last_rfid_stop_uid),
     vx,
     w);
 }

@@ -28,6 +28,7 @@ static float time_remaining = 300.0f;
 static bool nav_enabled = false;
 static MessengerState messenger_state = {true, false};
 static unsigned long last_tick_ms = 0;
+static constexpr bool NAV_MESSAGING_ENABLED = false;
 
 static void init_other_robots_inactive(void)
 {
@@ -67,7 +68,10 @@ void termthree_navigation_begin(void)
     messenger_state.emergency = false;
     last_tick_ms = millis();
 
-    messaging_begin("Terminator");
+    if(NAV_MESSAGING_ENABLED)
+    {
+        messaging_begin("Terminator");
+    }
 }
 
 void termthree_navigation_tick(void)
@@ -78,26 +82,32 @@ void termthree_navigation_tick(void)
 
     occupancy_decay(&occ, dt_s);
 
-    messaging_loop(
-        &messenger_state,
-        &occ,
-        holes,
-        hole_count,
-        resources,
-        &resource_count,
-        disabled,
-        &disabled_count
-    );
+    if(NAV_MESSAGING_ENABLED)
+    {
+        messaging_loop(
+            &messenger_state,
+            &occ,
+            holes,
+            hole_count,
+            resources,
+            &resource_count,
+            disabled,
+            &disabled_count
+        );
+    }
 
     emergency = messenger_state.emergency;
 
-    messaging_request_map_updates(
-        robot.pos,
-        robot.task,
-        &occ,
-        holes,
-        hole_count
-    );
+    if(NAV_MESSAGING_ENABLED)
+    {
+        messaging_request_map_updates(
+            robot.pos,
+            robot.task,
+            &occ,
+            holes,
+            hole_count
+        );
+    }
 
     if(!nav_enabled || !messenger_state.enabled)
     {
@@ -142,20 +152,26 @@ void termthree_navigation_tick(void)
         resource_count
     );
 
-    messaging_publish_pose(
-        robot.pos,
-        robot.task,
-        robot.score,
-        robot.seed_inventory
-    );
+    if(NAV_MESSAGING_ENABLED)
+    {
+        messaging_publish_pose(
+            robot.pos,
+            robot.task,
+            robot.score,
+            robot.seed_inventory
+        );
+    }
 
     if(robot.seed_planted_event &&
        robot.seed_planted_hole_index >= 0 &&
        robot.seed_planted_hole_index < hole_count)
     {
-        messaging_publish_seed_planted(
-            &holes[robot.seed_planted_hole_index]
-        );
+        if(NAV_MESSAGING_ENABLED)
+        {
+            messaging_publish_seed_planted(
+                &holes[robot.seed_planted_hole_index]
+            );
+        }
 
         robot.seed_planted_event = false;
         robot.seed_planted_hole_index = -1;

@@ -88,6 +88,29 @@ static void line_cmd(int argc, char** argv) {
         return;
     }
 
+    if (argc >= 2 && strcmp(argv[1], "pid") == 0) {
+        if (argc == 2) {
+            loggf("line pid=%.3f/%.3f\n", line_follower.kp(), line_follower.kd());
+            return;
+        }
+
+        if (argc != 4) {
+            loggf("usage: line pid <kp> <kd>\n");
+            return;
+        }
+
+        float kp = 0.0f;
+        float kd = 0.0f;
+        if (!parse_float(argv[2], &kp) || !parse_float(argv[3], &kd)) {
+            loggf("line pid args must be numbers\n");
+            return;
+        }
+
+        line_follower.set_pid(kp, kd);
+        loggf("line pid=%.3f/%.3f\n", line_follower.kp(), line_follower.kd());
+        return;
+    }
+
     if (argc >= 2 && strcmp(argv[1], "cross") == 0) {
         if (argc < 3 || argc > 4) {
             loggf("usage: line cross <speed> [front_cm]\n");
@@ -213,7 +236,7 @@ static void line_cmd(int argc, char** argv) {
     }
 
     if (argc != 2) {
-        loggf("usage: line <speed>|stop|status|cross <speed> [front_cm]|front <speed> <front_cm>|dist <speed> <cm> [front_cm]|rfid <speed> <any|notsame|uid> [front_cm]|corner <left|right|any> <speed> [front_cm]\n");
+        loggf("usage: line <speed>|stop|status|pid [kp kd]|cross <speed> [front_cm]|front <speed> <front_cm>|dist <speed> <cm> [front_cm]|rfid <speed> <any|notsame|uid> [front_cm]|corner <left|right|any> <speed> [front_cm]\n");
         return;
     }
 
@@ -227,4 +250,4 @@ static void line_cmd(int argc, char** argv) {
     line_follower.start(speed);
 }
 
-SHELL_COMMAND("line", line_cmd, "line follow: line <speed>|cross|front|dist|rfid|corner|stop|status")
+SHELL_COMMAND("line", line_cmd, "line follow: line <speed>|pid|cross|front|dist|rfid|corner|stop|status")

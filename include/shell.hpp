@@ -19,7 +19,7 @@ class Shell {
         : name(n), handler(h), help(he) {}
     };
 
-    static constexpr size_t MAX_ARGS   = 8;
+    static constexpr size_t MAX_ARGS   = 64;
     static constexpr size_t LINE_SIZE  = 256;
     static constexpr size_t MAX_INPUTS = 4;
 

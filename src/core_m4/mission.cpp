@@ -10,6 +10,7 @@
 #include "sensors.hpp"
 #include "state.hpp"
 #include "wall_follower.hpp"
+#include "mission/termthree_navigation.h"
 
 #include <Arduino.h>
 #include <math.h>
@@ -664,9 +665,11 @@ void mission_print_status() {
 }
 
 void func_mission_entry() {
+    termthree_navigation_begin();
 
     while (true) {
         auto* request = mission_mail.try_get_for(100ms);
+        termthree_navigation_tick();
         if (request == nullptr) continue;
 
         const uint8_t task_id = request->task_id;
