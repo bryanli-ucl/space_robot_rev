@@ -1,5 +1,7 @@
 #pragma once
 
+#include "config.hpp"
+
 #include <stdint.h>
 
 class WallFollower {
@@ -12,11 +14,15 @@ class WallFollower {
     static WallFollower& instance();
 
     void start(Side side, float speed, float target_distance_cm, int16_t target_wall_cm);
+    void set_pid(float distance_kp, float yaw_kp, float max_w);
     void stop();
     void update(float dt_s);
     void print_status() const;
 
     bool is_active() const { return active; }
+    float distance_kp() const { return distance_kp_value; }
+    float yaw_kp() const { return yaw_kp_value; }
+    float max_w() const { return max_w_value; }
     const char* side_name() const;
 
     private:
@@ -38,6 +44,9 @@ class WallFollower {
     float yaw_term = 0.0f;
     float distance_term = 0.0f;
     float w = 0.0f;
+    float distance_kp_value = WALL_DIST_KP;
+    float yaw_kp_value = WALL_YAW_KP;
+    float max_w_value = WALL_MAX_WHEEL_SPEED;
     uint8_t lost_count = 0;
     int32_t start_fl_count = 0;
     int32_t start_fr_count = 0;

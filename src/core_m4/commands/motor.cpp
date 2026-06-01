@@ -207,8 +207,8 @@ static void motor_cmd(int argc, char** argv) {
         }
 
         int pwm = 0;
-        if (!parse_int(argv[2], &pwm) || pwm < -255 || pwm > 255) {
-            loggf("motor all pwm must be -255..255\n");
+        if (!parse_int(argv[2], &pwm) || pwm < -MOTOR_PWM_MAX || pwm > MOTOR_PWM_MAX) {
+            loggf("motor all pwm must be -%d..%d\n", MOTOR_PWM_MAX, MOTOR_PWM_MAX);
             return;
         }
 
@@ -282,8 +282,8 @@ static void motor_cmd(int argc, char** argv) {
     }
 
     int pwm = 0;
-    if (!parse_int(argv[2], &pwm) || pwm < -255 || pwm > 255) {
-        loggf("motor pwm must be -255..255\n");
+    if (!parse_int(argv[2], &pwm) || pwm < -MOTOR_PWM_MAX || pwm > MOTOR_PWM_MAX) {
+        loggf("motor pwm must be -%d..%d\n", MOTOR_PWM_MAX, MOTOR_PWM_MAX);
         return;
     }
 

@@ -28,6 +28,12 @@ const char* WallFollower::side_name() const {
     return side == Side::Left ? "left" : "right";
 }
 
+void WallFollower::set_pid(float distance_kp, float yaw_kp, float max_w) {
+    distance_kp_value = distance_kp;
+    yaw_kp_value      = yaw_kp;
+    max_w_value       = constrain(fabsf(max_w), 1.0f, CHASSIS_MAX_WHEEL_SPEED);
+}
+
 void WallFollower::start(Side next_side, float next_speed, float next_target_distance_cm, int16_t next_target_wall_cm) {
     side                 = next_side;
     speed                = next_speed;
@@ -136,9 +142,9 @@ void WallFollower::update(float dt_s) {
     }
 
     yaw_error     = wrap_deg_180(yaw_start - imu.yaw_deg());
-    yaw_term      = TURN_DIRECTION * WALL_YAW_KP * yaw_error;
-    distance_term = TURN_DIRECTION * side_direction * WALL_DIST_KP * wall_error;
-    w             = constrain(yaw_term + distance_term, -WALL_MAX_WHEEL_SPEED, WALL_MAX_WHEEL_SPEED);
+    yaw_term      = TURN_DIRECTION * yaw_kp_value * yaw_error;
+    distance_term = TURN_DIRECTION * side_direction * distance_kp_value * wall_error;
+    w             = constrain(yaw_term + distance_term, -max_w_value, max_w_value);
 
     chassis.set_target(speed, 0.0f, w);
 
@@ -150,17 +156,20 @@ void WallFollower::update(float dt_s) {
 }
 
 void WallFollower::print_status() const {
-    loggf("wall active=%d side=%s speed=%.1f dist=%.1f/%.1f wall=%d/%d err=%.1f yaw=%.2f start=%.2f yawerr=%.2f yterm=%.1f dterm=%.1f front=%d lost=%u cross=%d w=%.1f\n",
+    loggf("wall active=%d side=%s speed=%.1f pid=dist%.3f/yaw%.3f/max%.1f strategy=w=yaw+dist yaw_hold=%.2f dist=%.1f/%.1f wall=%d/%d err=%.1f yaw=%.2f yawerr=%.2f yterm=%.1f dterm=%.1f front=%d lost=%u cross=%d w=%.1f\n",
     active ? 1 : 0,
     side_name(),
     speed,
+    distance_kp_value,
+    yaw_kp_value,
+    max_w_value,
+    yaw_start,
     traveled_distance_cm,
     target_distance_cm,
     wall_cm,
     target_wall_cm,
     wall_error,
     imu.yaw_deg(),
-    yaw_start,
     yaw_error,
     yaw_term,
     distance_term,

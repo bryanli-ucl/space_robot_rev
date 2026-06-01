@@ -60,9 +60,10 @@ constexpr pin_size_t MOTOR_FR_ENC_A    = D35;
 constexpr pin_size_t MOTOR_FR_ENC_B    = D34;
 
 // Velocity Controller
+constexpr int MOTOR_PWM_MAX            = 150;
 constexpr int MOTOR_PWM_DEADBAND       = 30;
-constexpr int MOTOR_PWM_START          = 220;
-constexpr int MOTOR_PWM_START_MAX      = 255;
+constexpr int MOTOR_PWM_START          = 150;
+constexpr int MOTOR_PWM_START_MAX      = 150;
 constexpr float MOTOR_PWM_START_RAMP_S = 0.20f;
 constexpr int MOTOR_PWM_RUN            = 40;
 constexpr float MOTOR_MOVING_SPEED_TH  = 8.0f;
@@ -100,8 +101,8 @@ constexpr uint8_t LINE_CROSS_CONFIRM         = 2;
 constexpr uint8_t LINE_CORNER_CONFIRM        = 3;
 constexpr int16_t LINE_DEFAULT_FRONT_STOP_CM = 12;
 constexpr float LINE_DIRECTION               = 1.0f;
-constexpr float LINE_KP                      = 0.330f;
-constexpr float LINE_KD                      = 0.180f;
+constexpr float LINE_KP                      = 0.200f;
+constexpr float LINE_KD                      = 0.100f;
 constexpr float LINE_MAX_WHEEL_SPEED         = 560.0f;
 constexpr float LINE_MIN_SPEED_SCALE         = 0.30f;
 constexpr uint32_t LINE_STATUS_INTERVAL_MS   = 500;
@@ -124,7 +125,7 @@ constexpr float TASK_RAMP_SPEED             = 180.0f;
 constexpr float TASK_WALL_SPEED             = 100.0f;
 constexpr float TASK_REVIVE_SPEED           = 70.0f;
 constexpr float TASK_OPEN_FIELD_DISTANCE_CM = 125.0f;
-constexpr float TASK_RAMP_DISTANCE_CM       = 120.0f;
+constexpr float TASK_RAMP_DISTANCE_CM       = 180.0f;
 constexpr float TASK6_WALL_SPEED            = 150.0f;
 constexpr float TASK6_WALL_DISTANCE_CM      = 120.0f;
 constexpr int16_t TASK6_WALL_TARGET_CM      = WALL_DEFAULT_TARGET_CM;
@@ -157,6 +158,12 @@ constexpr uint8_t TASK3_LAST_STRAIGHT_NODES   = 2;
 
 // Task 4
 // Task 5
+constexpr int16_t TASK5_LEFT_WALL_TRIGGER_CM = 20;
+constexpr int16_t TASK5_LEFT_WALL_TARGET_CM  = 20;
+constexpr float TASK5_APPROACH_MAX_CM        = 180.0f;
+constexpr float TASK5_WALL_DIST_KP           = -WALL_DIST_KP;
+constexpr float TASK5_WALL_YAW_KP            = WALL_YAW_KP;
+constexpr float TASK5_WALL_MAX_WHEEL_SPEED   = WALL_MAX_WHEEL_SPEED;
 // Task 6
 
 // Task 7

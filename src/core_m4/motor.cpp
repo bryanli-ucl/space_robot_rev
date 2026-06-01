@@ -49,7 +49,7 @@ void Motor::set_pwm(int pwm) {
 }
 
 void Motor::write_pwm(int pwm) {
-    pwm = constrain(pwm, -255, 255);
+    pwm = constrain(pwm, -MOTOR_PWM_MAX, MOTOR_PWM_MAX);
     if (abs(pwm) < MOTOR_PWM_DEADBAND) pwm = 0;
 
     pwm_value = pwm;
@@ -139,7 +139,7 @@ void Motor::update(float dt_s) {
         output_value = feedforward + pid;
     }
 
-    output_value = constrain(output_value, -255.0f, 255.0f);
+    output_value = constrain(output_value, -static_cast<float>(MOTOR_PWM_MAX), static_cast<float>(MOTOR_PWM_MAX));
     write_pwm(static_cast<int>(output_value));
 }
 

@@ -301,31 +301,111 @@ static bool run_standard_line() {
     return wait_line_done(TASK1_LINE_FOLLOW_TIMEOUT_MS);
 }
 
+static int16_t task4_wall_target_cm() {
+    const int16_t target_cm = sensors.ultrasonic_left_cm();
+    if (target_cm > 0) return target_cm;
+    return 20;
+}
+
 static bool run_open_field() {
-    set_phase("task4_forward_2_nodes");
-    if (!drive_blocking(TASK4_DRIVE_SPEED, TASK4_NODE_CM * 2.0f, -1)) return false;
+    set_phase("task4_wall_forward_2_nodes");
+    wall_follower.start(WallFollower::Side::Left, TASK4_DRIVE_SPEED, TASK4_NODE_CM * 2.0f, task4_wall_target_cm());
+    if (!wait_wall_done(MISSION_LINE_TIMEOUT_MS)) return false;
     if (!wait_blocking(TASK4_ACTION_SETTLE_MS)) return false;
 
     set_phase("task4_turn_right");
     if (!turn_blocking(TASK4_RIGHT_TURN_DEG, TURN_MAX_WHEEL_SPEED, TURN_TOLERANCE_DEG, MISSION_TURN_TIMEOUT_MS)) return false;
     if (!wait_blocking(TASK4_ACTION_SETTLE_MS)) return false;
 
-    set_phase("task4_forward_1_node");
-    if (!drive_blocking(TASK4_DRIVE_SPEED, TASK4_NODE_CM, -1)) return false;
+    set_phase("task4_forward_half_node");
+    if (!drive_blocking(TASK4_DRIVE_SPEED, TASK4_NODE_CM * 0.5f, -1)) return false;
     if (!wait_blocking(TASK4_ACTION_SETTLE_MS)) return false;
 
     set_phase("task4_turn_left");
     if (!turn_blocking(TASK4_LEFT_TURN_DEG, TURN_MAX_WHEEL_SPEED, TURN_TOLERANCE_DEG, MISSION_TURN_TIMEOUT_MS)) return false;
     if (!wait_blocking(TASK4_ACTION_SETTLE_MS)) return false;
 
-    set_phase("task4_forward_2_nodes_final");
-    if (!drive_blocking(TASK4_DRIVE_SPEED, TASK4_NODE_CM * 2.0f, -1)) return false;
+    set_phase("task4_wall_forward_2_nodes_final");
+    wall_follower.start(WallFollower::Side::Left, TASK4_DRIVE_SPEED, TASK4_NODE_CM * 2.0f, task4_wall_target_cm());
+    if (!wait_wall_done(MISSION_LINE_TIMEOUT_MS)) return false;
     return wait_blocking(TASK4_ACTION_SETTLE_MS);
 }
 
 static bool run_ramp() {
-    set_phase("ramp_drive");
-    return drive_blocking(TASK_RAMP_SPEED, TASK_RAMP_DISTANCE_CM, LINE_DEFAULT_FRONT_STOP_CM);
+    set_phase("ramp_approach_left_wall");
+    int32_t fl0 = 0;
+    int32_t fr0 = 0;
+    int32_t rl0 = 0;
+    int32_t rr0 = 0;
+    reset_drive_counts(fl0, fr0, rl0, rr0);
+
+    const uint32_t start_ms = millis();
+    uint32_t last_status_ms = 0;
+
+    loggf("mission ramp stage1 approach speed=%.1f max=%.1f left_trigger=%d\n",
+    TASK_RAMP_SPEED,
+    TASK5_APPROACH_MAX_CM,
+    TASK5_LEFT_WALL_TRIGGER_CM);
+
+    while (true) {
+        if (should_stop()) {
+            chassis_stop();
+            return false;
+        }
+
+        const float dist_cm    = traveled_cm(fl0, fr0, rl0, rr0);
+        const int16_t front_cm = sensors.ultrasonic_front_cm();
+        const int16_t left_cm  = sensors.ultrasonic_left_cm();
+
+        if (front_cm > 0 && front_cm <= LINE_DEFAULT_FRONT_STOP_CM) {
+            chassis_stop();
+            loggf("mission ramp front stop front=%d threshold=%d dist=%.1f\n",
+            front_cm,
+            LINE_DEFAULT_FRONT_STOP_CM,
+            dist_cm);
+            return true;
+        }
+
+        if (left_cm > 0 && left_cm < TASK5_LEFT_WALL_TRIGGER_CM) {
+            chassis_stop();
+            loggf("mission ramp left wall found left=%d threshold=%d dist=%.1f\n",
+            left_cm,
+            TASK5_LEFT_WALL_TRIGGER_CM,
+            dist_cm);
+            break;
+        }
+
+        if (dist_cm >= TASK5_APPROACH_MAX_CM || millis() - start_ms >= MISSION_DRIVE_TIMEOUT_MS) {
+            chassis_stop();
+            loggf("mission ramp left wall not found left=%d dist=%.1f max=%.1f\n",
+            left_cm,
+            dist_cm,
+            TASK5_APPROACH_MAX_CM);
+            return false;
+        }
+
+        chassis.set_target(TASK_RAMP_SPEED, 0.0f, 0.0f);
+
+        const uint32_t now_ms = millis();
+        if (last_status_ms == 0 || now_ms - last_status_ms >= WALL_STATUS_INTERVAL_MS) {
+            last_status_ms = now_ms;
+            loggf("mission ramp approach dist=%.1f/%.1f left=%d/%d front=%d\n",
+            dist_cm,
+            TASK5_APPROACH_MAX_CM,
+            left_cm,
+            TASK5_LEFT_WALL_TRIGGER_CM,
+            front_cm);
+        }
+
+        ThisThread::sleep_for(20ms);
+    }
+
+    if (!wait_blocking(TASK4_ACTION_SETTLE_MS)) return false;
+
+    set_phase("ramp_wall_follow_left");
+    wall_follower.set_pid(TASK5_WALL_DIST_KP, TASK5_WALL_YAW_KP, TASK5_WALL_MAX_WHEEL_SPEED);
+    wall_follower.start(WallFollower::Side::Left, TASK_RAMP_SPEED, TASK_RAMP_DISTANCE_CM, TASK5_LEFT_WALL_TARGET_CM);
+    return wait_wall_done(MISSION_LINE_TIMEOUT_MS);
 }
 
 static bool run_wall_task() {

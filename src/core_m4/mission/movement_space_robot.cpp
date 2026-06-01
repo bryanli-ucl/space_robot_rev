@@ -17,7 +17,6 @@ using namespace ::rtos;
 static constexpr float CELL_DISTANCE_CM             = TASK4_NODE_CM;
 static constexpr float DRIVE_SPEED                  = TASK_DRIVE_SPEED;
 static constexpr float LINE_SPEED                   = TASK_LINE_SPEED;
-static constexpr float RFID_CENTER_BACKUP_CM        = 5.0f;
 static constexpr float TURN_EXIT_FORWARD_CM         = 5.0f;
 static constexpr int16_t FRONT_BLOCKED_CM           = TASK_OBSTACLE_FRONT_CM;
 static constexpr uint32_t RFID_TIMEOUT_MS           = 2500;
@@ -43,7 +42,6 @@ static bool follow_line_to_next_rfid(uint32_t* detected_uid) {
     if (detected_uid != NULL) *detected_uid = uid;
     if (uid == 0) return false;
 
-    motion_drive_blocking(-DRIVE_SPEED * 0.5f, RFID_CENTER_BACKUP_CM, -1, MISSION_DRIVE_TIMEOUT_MS);
     return true;
 }
 

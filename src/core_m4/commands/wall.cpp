@@ -54,8 +54,43 @@ static void wall_cmd(int argc, char** argv) {
         return;
     }
 
+    if (argc >= 2 && strcmp(argv[1], "pid") == 0) {
+        if (argc == 2) {
+            loggf("wall pid dist=%.3f yaw=%.3f max_w=%.1f strategy: w=TURN_DIRECTION*(yaw_kp*yaw_error + side_direction*dist_kp*wall_error), then clamp to max_w\n",
+            wall_follower.distance_kp(),
+            wall_follower.yaw_kp(),
+            wall_follower.max_w());
+            return;
+        }
+
+        if (argc != 4 && argc != 5) {
+            loggf("usage: wall pid <dist_kp> <yaw_kp> [max_w]\n");
+            return;
+        }
+
+        float dist_kp = 0.0f;
+        float yaw_kp  = 0.0f;
+        float max_w   = wall_follower.max_w();
+        if (!parse_float(argv[2], &dist_kp) || !parse_float(argv[3], &yaw_kp)) {
+            loggf("wall pid dist_kp and yaw_kp must be numbers\n");
+            return;
+        }
+
+        if (argc == 5 && !parse_float(argv[4], &max_w)) {
+            loggf("wall pid max_w must be a number\n");
+            return;
+        }
+
+        wall_follower.set_pid(dist_kp, yaw_kp, max_w);
+        loggf("wall pid dist=%.3f yaw=%.3f max_w=%.1f\n",
+        wall_follower.distance_kp(),
+        wall_follower.yaw_kp(),
+        wall_follower.max_w());
+        return;
+    }
+
     if (argc < 4 || argc > 5 || (strcmp(argv[1], "left") != 0 && strcmp(argv[1], "right") != 0)) {
-        loggf("usage: wall left|right <speed> <dist_cm> [target_cm|auto] | wall stop | wall status\n");
+        loggf("usage: wall left|right <speed> <dist_cm> [target_cm|auto] | wall pid [dist_kp yaw_kp max_w] | wall stop | wall status\n");
         return;
     }
 
@@ -98,4 +133,4 @@ static void wall_cmd(int argc, char** argv) {
     wall_follower.start(side, fabsf(speed), distance_cm, target_cm);
 }
 
-SHELL_COMMAND("wall", wall_cmd, "wall follow: wall left|right <speed> <dist_cm> [target_cm|auto]")
+SHELL_COMMAND("wall", wall_cmd, "wall follow: wall left|right <speed> <dist_cm> [target_cm|auto], wall pid")
