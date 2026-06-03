@@ -13,9 +13,9 @@ static constexpr size_t WIRELESS_LOG_DEPTH = 32;
 
 static Mail<std::array<char, Logger::MESSAGE_SIZE>, LOGGER_QUEUE_DEPTH> logger_mail;
 static char wireless_logs[WIRELESS_LOG_DEPTH][Logger::MESSAGE_SIZE] = {};
-static size_t wireless_log_head = 0;
-static size_t wireless_log_tail = 0;
-static size_t wireless_log_count = 0;
+static size_t wireless_log_head                                     = 0;
+static size_t wireless_log_tail                                     = 0;
+static size_t wireless_log_count                                    = 0;
 
 Logger& logger = Logger::instance();
 

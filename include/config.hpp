@@ -33,6 +33,14 @@ constexpr uint32_t RFID_SAMPLE_INTERVAL_MS = 100;
 constexpr uint32_t RFID_REPEAT_COOLDOWN_MS = 200;
 constexpr uint32_t RFID_VALID_MS           = 1000;
 
+// ============================ Seed Dropper ================================
+constexpr pin_size_t SEED_DROPPER_PWM_PIN       = D6;
+constexpr pin_size_t SEED_DROPPER_ENC_A_PIN     = D11;
+constexpr pin_size_t SEED_DROPPER_ENC_B_PIN     = D12;
+constexpr uint8_t SEED_DROPPER_PWM_HIGH         = 100;
+constexpr int32_t SEED_DROPPER_DROP_COUNTS      = 120;
+constexpr uint32_t SEED_DROPPER_DROP_TIMEOUT_MS = 2000;
+
 // ================================ Motors ==================================
 // Motor Pins
 constexpr pin_size_t MOTOR_RL_EN       = D2;

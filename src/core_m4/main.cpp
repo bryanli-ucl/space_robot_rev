@@ -6,6 +6,7 @@
 #include "motor.hpp"
 #include "rfid.hpp"
 #include "rpc_bridge.hpp"
+#include "seed_dropper.hpp"
 #include "sensors.hpp"
 #include "shell.hpp"
 #include "state.hpp"
@@ -45,6 +46,7 @@ void setup() {
 
     sensors_begin();
     rfid_begin();
+    seed_dropper_begin();
     imu_begin();
 
     // =========================== Start up Threads ===========================

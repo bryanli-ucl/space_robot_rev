@@ -6,7 +6,7 @@ Arduino GIGA R1 based robot software for the Term 3 Robotics Challenge. The curr
 
 | Path           | Purpose                                                                                                                    |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `src/core_m4/` | Main robot control: shell, logger, motors, chassis, sensors, IMU, RFID, line following, wall following, and mission flows. |
+| `src/core_m4/` | Main robot control: shell, logger, motors, chassis, sensors, IMU, RFID, line following, wall following, mission flows, and navigation adapters. |
 | `src/core_m7/` | WiFi control bridge. It forwards shell commands to M4 via RPC and streams logs back to the PC.                             |
 | `include/`     | Shared headers and all main calibration constants in `config.hpp`.                                                         |
 | `libraries/`   | Local libraries, including the QTR sensor library used by the IR line array.                                               |
@@ -61,6 +61,8 @@ Main thread startup is in `src/core_m4/main.cpp`: it starts logger, shell, chass
 | ---- | -------------- |
 | `src/core_m4/main.cpp` | M4 startup and RTOS thread creation. |
 | `src/core_m4/mission.cpp` | High-level blocking mission flows for `task 1` to `task 8`. |
+| `src/core_m4/motion_primitives.cpp` | Shared blocking movement helpers for distance driving, IMU turns and IR line reacquisition. |
+| `src/core_m4/mission/` | Higher-level navigation/planning code and adapters to the robot movement API. |
 | `src/core_m4/line_follower.cpp` | PID line tracking and line stop conditions: cross, corner, front stop, distance, RFID and lost-line detection. |
 | `src/core_m4/chassis.cpp` | Chassis velocity target handling, encoder distance support and stop output. |
 | `src/core_m4/motor.cpp` | Per-wheel encoder feedback, velocity PID, PWM compensation and motor commands. |
@@ -117,12 +119,18 @@ sensor watch on        periodically print all sensors
 sensor rfid            print RFID status
 imu                    print IMU status
 motor enc              print motor encoder/speed/PID state
+motor pid P I D        tune wheel velocity PID
 move status            print chassis status
 line cross 150         follow line until cross
 line corner left 150   follow line until left corner
 line rfid 150 any      follow line until any RFID
+line pid               print line follower PID
+line pid 0.2 0.1       tune line follower PID remotely
+wall status            print wall follower strategy and state
+wall pid               print wall follower distance/yaw gains
+wall pid 3 10 220      tune wall follower distance gain, yaw gain and max turn speed
 drive forward 150 10   drive forward 10 cm
-turn 90                IMU turn right
+turn 90                turn right by 90 degrees
 turn ir left 300       rotate left until IR sees line
 task 2                 run mission task 2
 task status            print mission/task status
@@ -156,7 +164,7 @@ flowchart TD
 
 ### Turning
 
-Manual `turn` uses IMU yaw feedback. Mission turns use a hybrid strategy:
+Turns use IMU yaw feedback and, where required by the mission flow, an IR line reacquisition step:
 
 1. Turn part of the angle using IMU yaw.
 2. Finish by rotating until the IR array sees the next line.
@@ -168,6 +176,23 @@ This reduces overshoot and helps re-align to the physical track.
 Mission flows run in a permanent M4 mission thread. Shell command `task <id>` queues a mission request; the mission thread then runs a blocking task function. `stop` and `task stop` have priority and force line follower, wall follower and chassis outputs to stop.
 
 Implemented in `src/core_m4/mission.cpp`.
+
+### Wall Following
+
+Wall following combines side ultrasonic distance with IMU yaw hold. At the start of a wall-follow segment, the current yaw is saved as the heading reference. During the run:
+
+- `yaw_error = start_yaw - current_yaw`
+- `wall_error = wall_distance - target_wall_distance`
+- `w = yaw_term + distance_term`, clamped by `max_w`
+
+The controller supports remote tuning:
+
+```text
+wall pid
+wall pid <dist_kp> <yaw_kp> [max_w]
+```
+
+`wall status` prints the active side, target distance, travelled distance, wall error, yaw error, PID gains and final `w`.
 
 ### Safety And State LEDs
 
@@ -185,25 +210,28 @@ The robot has both software and hardware stop paths:
 | Task 1 | Tested working               | Basic line following.                                                                    |
 | Task 2 | Tested working               | Exit/intersection flow: cross, corners, RFID wait, wall/front stop.                      |
 | Task 3 | Tested working               | Solid-grid cross navigation.                                                             |
-| Task 4 | Implemented with limitations | Open-field drive mission using encoder distance.                                         |
-| Task 5 | Implemented with limitations | Ramp drive mission using encoder distance and front stop.                                |
-| Task 6 | Implemented with limitations | Wall-follow mission exists but is limited by ultrasonic reliability and wheel mechanics. |
+| Task 4 | Tested working               | Open-field mission using left wall follow for long straight segments, encoder distance for the middle segment, and IMU turns. |
+| Task 5 | Implemented and tuned        | Two-stage ramp approach: drive until left wall is detected, then left wall follow for 180 cm. |
+| Task 6 | Implemented and tuned        | Left wall-follow mission for 120 cm using ultrasonic distance and IMU heading hold.       |
 | Task 7 | Tested working               | Obstacle detection at cross, obstacle bypass, return to line.                            |
 | Task 8 | Tested working               | Revive approach: line follow, speed zones by front distance, stop on D44 contact button. |
 
-All `task <1..8>` commands are routed through the M4 mission thread. Task 1/4/5/6 are simpler mission flows; Task 2/3/7/8 are the main tested mission flows.
+All `task <1..8>` commands are routed through the M4 mission thread.
 
 ## Calibration Notes
 
 Important calibration constants are in `include/config.hpp`:
 
 - motor PID and feed-forward: `MOTOR_PID_KP`, `MOTOR_PID_KI`, `MOTOR_SPEED_KF`
-- start/run PWM compensation: `MOTOR_PWM_START`, `MOTOR_PWM_RUN`
+- PWM safety limit and compensation: `MOTOR_PWM_MAX`, `MOTOR_PWM_START`, `MOTOR_PWM_RUN`
 - encoder distance conversion: `CHASSIS_ENCODER_COUNTS_PER_CM`
 - line PID: `LINE_KP`, `LINE_KD`
+- wall-follow gains: `WALL_DIST_KP`, `WALL_YAW_KP`, `WALL_MAX_WHEEL_SPEED`
 - ultrasonic filtering: `ULTRASONIC_SAMPLE_INTERVAL_MS`, `ULTRASONIC_LOW_PASS_ALPHA`
 - turn control: `TURN_KP`, `TURN_KD`, `MISSION_TURN_IMU_RATIO`
 - task distances/speeds: `TASK*_...`
+
+The final motor PWM output is hard-limited by `MOTOR_PWM_MAX`, currently `150`, to protect the motors with the updated battery setup.
 
 Useful calibration commands:
 
@@ -215,6 +243,11 @@ imu cal gyro
 imu cal mag
 sensor watch on
 line status
+line pid
+line pid 0.2 0.1
+wall status
+wall pid
+wall pid 3 10 220
 ```
 
 ## Testing Evidence
@@ -223,7 +256,6 @@ Testing notes and screenshot index are in `docs/testing.md`.
 
 ## Known Limitations
 
-- Some ultrasonic modules were unreliable during testing. The front ultrasonic sensor was good enough for obstacle/front-stop behaviours, while left/right wall following was less reliable.
 - The mecanum rollers had mechanical issues, so motion is treated like a normal four-wheel chassis rather than relying on sideways movement.
-- Task 4-6 are implemented but have less physical test coverage than Task 1/2/3/7/8.
-- WiFi control uses RPC strings on M7; long-term soak testing should watch for memory issues, although current M4 control build is stable and compiles successfully.
+- Wall-follow performance depends on the quality and mounting angle of the side ultrasonic sensor. The left ultrasonic module was replaced and is used for the tuned wall-follow tasks.
+- WiFi control uses RPC strings on M7 instead of a full MQTT workflow. M7 is kept as a wireless shell/log bridge while real-time control remains on M4.

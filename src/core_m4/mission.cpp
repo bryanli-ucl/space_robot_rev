@@ -301,16 +301,9 @@ static bool run_standard_line() {
     return wait_line_done(TASK1_LINE_FOLLOW_TIMEOUT_MS);
 }
 
-static int16_t task4_wall_target_cm() {
-    const int16_t target_cm = sensors.ultrasonic_left_cm();
-    if (target_cm > 0) return target_cm;
-    return 20;
-}
-
 static bool run_open_field() {
-    set_phase("task4_wall_forward_2_nodes");
-    wall_follower.start(WallFollower::Side::Left, TASK4_DRIVE_SPEED, TASK4_NODE_CM * 2.0f, task4_wall_target_cm());
-    if (!wait_wall_done(MISSION_LINE_TIMEOUT_MS)) return false;
+    set_phase("task4_forward_2_nodes");
+    if (!drive_blocking(TASK4_DRIVE_SPEED, TASK4_NODE_CM * 2.0f, -1)) return false;
     if (!wait_blocking(TASK4_ACTION_SETTLE_MS)) return false;
 
     set_phase("task4_turn_right");
@@ -325,9 +318,8 @@ static bool run_open_field() {
     if (!turn_blocking(TASK4_LEFT_TURN_DEG, TURN_MAX_WHEEL_SPEED, TURN_TOLERANCE_DEG, MISSION_TURN_TIMEOUT_MS)) return false;
     if (!wait_blocking(TASK4_ACTION_SETTLE_MS)) return false;
 
-    set_phase("task4_wall_forward_2_nodes_final");
-    wall_follower.start(WallFollower::Side::Left, TASK4_DRIVE_SPEED, TASK4_NODE_CM * 2.0f, task4_wall_target_cm());
-    if (!wait_wall_done(MISSION_LINE_TIMEOUT_MS)) return false;
+    set_phase("task4_forward_2_nodes_final");
+    if (!drive_blocking(TASK4_DRIVE_SPEED, TASK4_NODE_CM * 2.0f, -1)) return false;
     return wait_blocking(TASK4_ACTION_SETTLE_MS);
 }
 

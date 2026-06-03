@@ -4,6 +4,7 @@
 #include "line_follower.hpp"
 #include "motion_primitives.hpp"
 #include "rfid.hpp"
+#include "seed_dropper.hpp"
 #include "sensors.hpp"
 #include "state.hpp"
 
@@ -83,6 +84,7 @@ void align_to_hole_midpoint(void) {
 void drop_seed(void) {
     wait_for_rfid_confirmation();
     motion_stop_all();
+    seed_dropper.drop_one();
 }
 
 bool wait_for_rfid_confirmation(void) {
