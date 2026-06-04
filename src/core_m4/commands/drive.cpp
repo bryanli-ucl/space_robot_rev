@@ -1,5 +1,6 @@
 #include "chassis.hpp"
 #include "config.hpp"
+#include "fast_line_follower.hpp"
 #include "line_follower.hpp"
 #include "logger.hpp"
 #include "mission.hpp"
@@ -89,6 +90,7 @@ static void drive_until(float vx, float target_cm, int16_t front_stop_cm) {
     mission_stop();
     wall_follower_stop();
     line_follower_stop();
+    fast_line_follower_stop();
     reset_drive_counts();
     last_target_cm = target_cm;
 
@@ -133,6 +135,7 @@ static void drive_cmd(int argc, char** argv) {
         mission_stop();
         wall_follower_stop();
         line_follower_stop();
+    fast_line_follower_stop();
         chassis_stop();
         print_drive_status();
         return;

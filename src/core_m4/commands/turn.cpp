@@ -1,5 +1,6 @@
 #include "chassis.hpp"
 #include "config.hpp"
+#include "fast_line_follower.hpp"
 #include "imu.hpp"
 #include "line_follower.hpp"
 #include "logger.hpp"
@@ -118,6 +119,7 @@ static void turn_ir_cmd(int argc, char** argv) {
     mission_stop();
     wall_follower_stop();
     line_follower_stop();
+    fast_line_follower_stop();
 
     search_w = constrain(fabsf(search_w), 1.0f, CHASSIS_MAX_WHEEL_SPEED);
     if (motion_turn_to_line_blocking(direction, search_w, timeout_ms)) {
@@ -157,6 +159,7 @@ static void turn_cmd(int argc, char** argv) {
     mission_stop();
     wall_follower_stop();
     line_follower_stop();
+    fast_line_follower_stop();
 
     if (motion_turn_imu_then_line_blocking(delta_deg)) {
         loggf("turn done hybrid delta=%.1f\n", delta_deg);

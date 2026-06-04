@@ -1,6 +1,7 @@
 #include "state.hpp"
 #include "chassis.hpp"
 #include "config.hpp"
+#include "fast_line_follower.hpp"
 #include "line_follower.hpp"
 #include "logger.hpp"
 #include "mission.hpp"
@@ -52,6 +53,7 @@ void state_force_stop(const char* reason) {
     mission_stop();
     wall_follower_stop();
     line_follower_stop();
+    fast_line_follower_stop();
     chassis_stop();
     set_running_state(RunningState::STOPPED);
 

@@ -115,6 +115,21 @@ constexpr float LINE_MAX_WHEEL_SPEED         = 560.0f;
 constexpr float LINE_MIN_SPEED_SCALE         = 0.30f;
 constexpr uint32_t LINE_STATUS_INTERVAL_MS   = 500;
 
+// Fast Line Follower
+constexpr float LINEF_DEFAULT_SPEED       = 180.0f;
+constexpr float LINEF_KP                  = 0.20f;
+constexpr float LINEF_KI                  = 0.00f;
+constexpr float LINEF_KD                  = 0.10f;
+constexpr float LINEF_INTEGRAL_LIMIT      = 3000.0f;
+constexpr float LINEF_MAX_WHEEL_SPEED     = 560.0f;
+constexpr float LINEF_MIN_SPEED_SCALE     = 0.45f;
+constexpr float LINEF_RECOVERY_SPEED_SCALE = 0.30f;
+constexpr float LINEF_EDGE_SEARCH_W       = 300.0f;
+constexpr uint8_t LINEF_CENTER_SENSOR     = 4;
+constexpr uint16_t LINEF_CENTER_THRESHOLD = LINE_BLACK_THRESHOLD;
+constexpr uint8_t LINEF_CENTER_CONFIRM    = 2;
+constexpr uint32_t LINEF_STATUS_INTERVAL_MS = 500;
+
 // Wall Follower
 constexpr int16_t WALL_DEFAULT_TARGET_CM   = -1;
 constexpr int16_t WALL_FRONT_STOP_CM       = 12;

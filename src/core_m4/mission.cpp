@@ -2,6 +2,7 @@
 
 #include "chassis.hpp"
 #include "config.hpp"
+#include "fast_line_follower.hpp"
 #include "imu.hpp"
 #include "line_follower.hpp"
 #include "logger.hpp"
@@ -62,6 +63,7 @@ static void set_phase_cross(const char* prefix, uint8_t index) {
 
 static void stop_actions() {
     line_follower_stop();
+    fast_line_follower_stop();
     wall_follower_stop();
     chassis_stop();
 }
@@ -87,12 +89,14 @@ static bool wait_line_done(uint32_t timeout_ms) {
     while (line_follower.is_active()) {
         if (should_stop()) {
             line_follower_stop();
+    fast_line_follower_stop();
             return false;
         }
 
         if (millis() - start_ms >= timeout_ms) {
             loggf("mission line timeout phase=%s\n", mission_phase);
             line_follower_stop();
+    fast_line_follower_stop();
             return false;
         }
 
@@ -583,6 +587,7 @@ static bool run_revive() {
     while (millis() - start_ms < TASK8_TIMEOUT_MS) {
         if (should_stop()) {
             line_follower_stop();
+    fast_line_follower_stop();
             return false;
         }
 
@@ -592,6 +597,7 @@ static bool run_revive() {
 
         if (touched) {
             line_follower_stop();
+    fast_line_follower_stop();
             set_phase("revive_contact");
             loggf("mission revive contact front=%d dist=%.1f elapsed=%lums\n",
             front_cm,
@@ -607,6 +613,7 @@ static bool run_revive() {
 
         if (dist_cm >= TASK8_MAX_DISTANCE_CM) {
             line_follower_stop();
+    fast_line_follower_stop();
             loggf("mission revive max distance front=%d dist=%.1f target=%.1f button=0\n",
             front_cm,
             dist_cm,
@@ -653,6 +660,7 @@ static bool run_revive() {
     }
 
     line_follower_stop();
+    fast_line_follower_stop();
     loggf("mission revive timeout front=%d dist=%.1f button=%d\n",
     sensors.ultrasonic_front_cm(),
     traveled_cm(fl0, fr0, rl0, rr0),

@@ -1,6 +1,7 @@
 #include "line_follower.hpp"
 
 #include "config.hpp"
+#include "fast_line_follower.hpp"
 #include "logger.hpp"
 #include "mission.hpp"
 #include "shell.hpp"
@@ -76,6 +77,12 @@ static bool parse_optional_front(int argc, char** argv, int index, int16_t* fron
     return true;
 }
 
+static void prepare_line_start() {
+    mission_stop();
+    wall_follower_stop();
+    fast_line_follower_stop();
+}
+
 static void line_cmd(int argc, char** argv) {
     if (argc == 1 || (argc == 2 && strcmp(argv[1], "status") == 0)) {
         line_follower.print_status();
@@ -123,8 +130,7 @@ static void line_cmd(int argc, char** argv) {
         int16_t front_cm = -1;
         if (!parse_speed(argv[2], &speed) || !parse_optional_front(argc, argv, 3, &front_cm)) return;
 
-        mission_stop();
-        wall_follower_stop();
+        prepare_line_start();
         line_follower.start(speed, LineFollower::StopMode::Cross, front_cm);
         return;
     }
@@ -144,8 +150,7 @@ static void line_cmd(int argc, char** argv) {
             return;
         }
 
-        mission_stop();
-        wall_follower_stop();
+        prepare_line_start();
         line_follower.start(speed, LineFollower::StopMode::Front, front_cm);
         return;
     }
@@ -167,8 +172,7 @@ static void line_cmd(int argc, char** argv) {
             return;
         }
 
-        mission_stop();
-        wall_follower_stop();
+        prepare_line_start();
         line_follower.start(speed, LineFollower::StopMode::Distance, front_cm, distance_cm);
         return;
     }
@@ -199,8 +203,7 @@ static void line_cmd(int argc, char** argv) {
             return;
         }
 
-        mission_stop();
-        wall_follower_stop();
+        prepare_line_start();
         line_follower.start_rfid(speed, uid, any_uid, not_same, front_cm);
         return;
     }
@@ -229,8 +232,7 @@ static void line_cmd(int argc, char** argv) {
         int16_t front_cm = -1;
         if (!parse_speed(argv[3], &speed) || !parse_optional_front(argc, argv, 4, &front_cm)) return;
 
-        mission_stop();
-        wall_follower_stop();
+        prepare_line_start();
         line_follower.start(speed, mode, front_cm);
         return;
     }
@@ -245,8 +247,7 @@ static void line_cmd(int argc, char** argv) {
     float speed = 0.0f;
     if (!parse_speed(argv[1], &speed)) return;
 
-    mission_stop();
-    wall_follower_stop();
+    prepare_line_start();
     line_follower.start(speed);
 }
 

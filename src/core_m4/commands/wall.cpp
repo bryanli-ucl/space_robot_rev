@@ -1,6 +1,7 @@
 #include "wall_follower.hpp"
 
 #include "config.hpp"
+#include "fast_line_follower.hpp"
 #include "imu.hpp"
 #include "line_follower.hpp"
 #include "logger.hpp"
@@ -130,6 +131,7 @@ static void wall_cmd(int argc, char** argv) {
 
     mission_stop();
     line_follower_stop();
+    fast_line_follower_stop();
     wall_follower.start(side, fabsf(speed), distance_cm, target_cm);
 }
 

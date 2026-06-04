@@ -1,4 +1,5 @@
 #include "chassis.hpp"
+#include "fast_line_follower.hpp"
 #include "line_follower.hpp"
 #include "logger.hpp"
 #include "mission.hpp"
@@ -69,6 +70,7 @@ static void move_cmd(int argc, char** argv) {
         mission_stop();
         wall_follower_stop();
         line_follower_stop();
+    fast_line_follower_stop();
         chassis_stop();
         print_chassis();
         return;
@@ -101,6 +103,7 @@ static void move_cmd(int argc, char** argv) {
     mission_stop();
     wall_follower_stop();
     line_follower_stop();
+    fast_line_follower_stop();
     chassis.set_target(vx, vy, w);
     print_chassis();
 
